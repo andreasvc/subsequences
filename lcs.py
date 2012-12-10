@@ -3,7 +3,8 @@ import sys, os
 from getopt import gnu_getopt, GetoptError
 from _lcs import Comparator
 
-USAGE = """usage: %s text1 text2 [text3 ... textn --batch dir] [--all] [--debug]
+USAGE = """
+usage: %s text1 text2 [text3 ... textn --batch dir] [--all] [--debug]
 
 text1 and text2 are filenames, each file containting
 one sentence per line, words space separated.
@@ -16,7 +17,7 @@ in each sentence pair, preceded by its occurrence frequency and a tab.
                 and write the results to dir/A_B for file A compared to B.
     --bracket   input is in the form of bracketed trees:
                 (S (DT one) (RB per) (NN line))
-    --pos       when --bracket is enabled, included POS tags with tokens.
+    --pos       when --bracket is enabled, include POS tags with tokens.
 """ % sys.argv[0]
 
 def main():
@@ -38,7 +39,8 @@ def main():
 	else:
 		assert len(args) >= 2, USAGE
 	filename1 = args[0]
-	comparator = Comparator(filename1, bracket="--bracket" in opts, pos="--pos" in opts)
+	comparator = Comparator(filename1,
+			bracket="--bracket" in opts, pos="--pos" in opts)
 	for filename2 in args[1:]:
 		# find subsequences
 		results = comparator.getsequences(filename2,

@@ -36,5 +36,5 @@ Usage:
                     and write the results to dir/A_B for file A compared to B.
         --bracket   input is in the form of bracketed trees:
                     (S (DT one) (RB per) (NN line))
-        --pos       when --bracket is enabled, included POS tags with tokens.
+        --pos       when --bracket is enabled, include POS tags with tokens.
 
