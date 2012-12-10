@@ -28,24 +28,32 @@ cdef struct Sequence:
 # a terminal in a tree in bracket notation is anything between
 # a space and a closing paren; use group to extract only the terminal.
 terminalsre = re.compile(r" ([^ )]+)\)")
+posterminalsre = re.compile(r"\(([^ )]+) ([^ )]+)\)")
 
 cdef class Text(object):
 	""" Takes a file whose lines are sequences (e.g., sentences) of
 	space-delimeted tokens (e.g., words), and compiles it into an array with
 	tokens mapped to integers, according to the given mapping. """
 
-	cdef Sequence *seqs
-	cdef Token *tokens # this contiguous array will contain all tokens
-	cdef public size_t length, maxlen
+	cdef:
+		Sequence *seqs
+		Token *tokens # this contiguous array will contain all tokens
+		public size_t length, maxlen
 
-	def __init__(self, filename, mapping, bracket=False):
-		cdef Token maxidx = max(mapping.values()) + 1
-		cdef size_t n, m, idx = 0
-		cdef list text
+	def __init__(self, filename, mapping, bracket=False, pos=False):
+		cdef:
+			Token maxidx = max(mapping.values()) + 1
+			size_t n, m, idx = 0
+			list text
 		if bracket:
-			text = [terminalsre.findall(a) for a in open(filename)]
+			if pos:
+				text = [["/".join(reversed(tagword))
+						for tagword in posterminalsre.findall(line)]
+						for line in open(filename)]
+			else:
+				text = [terminalsre.findall(line) for line in open(filename)]
 		else:
-			text = [a.strip().split() for a in open(filename)]
+			text = [line.strip().split() for line in open(filename)]
 
 		self.length = len(text)
 		self.maxlen = max(map(len, text))
@@ -75,19 +83,23 @@ cdef class Comparator(object):
 	cdef:
 		Text text1
 		dict mapping, revmapping
+		bint bracket, pos
 
-	def __init__(self, filename, bracket=False):
-		self.mapping, self.revmapping = getmapping(filename, bracket)
-		self.text1 = Text(filename, self.mapping, bracket)
+	def __init__(self, filename, bracket=False, pos=False):
+		self.mapping, self.revmapping = getmapping(filename, bracket, pos)
+		self.text1 = Text(filename, self.mapping, bracket, pos)
+		self.bracket = bracket
+		self.pos = pos
 
-	def getsequences(self, filename, getall=False, bracket=False, debug=False):
-		cdef Text text2
-		cdef UChar *chart
-		cdef Sequence result, *seq1, *seq2
-		cdef size_t n, m
+	def getsequences(self, filename, getall=False, debug=False):
+		cdef:
+			Text text2
+			UChar *chart
+			Sequence result, *seq1, *seq2
+			size_t n, m
 
 		# read data
-		text2 = Text(filename, self.mapping, bracket)
+		text2 = Text(filename, self.mapping, self.bracket, self.pos)
 		chart = <UChar *>malloc(self.text1.maxlen * text2.maxlen * sizeof(UChar))
 		assert chart is not NULL
 		result.tokens = <Token *>malloc(min(self.text1.maxlen, text2.maxlen)
@@ -122,14 +134,18 @@ cdef class Comparator(object):
 		del results[()]
 		return results
 
-def getmapping(filename, bracket=False):
+def getmapping(filename, bracket=False, pos=False):
 	""" Create a mapping of tokens to integers and back from a given file. """
 	# the sentinel token will be the empty string '' (used to indicate gaps)
 	mapping = {'': 0}
 	revmapping = {0: ''}
 	# split file into tokens and turn into set
 	if bracket:
-		tokens = set(terminalsre.findall(open(filename).read()))
+		if pos:
+			tokens = set(["/".join(reversed(tagword)) for tagword
+					in posterminalsre.findall(open(filename).read())])
+		else:
+			tokens = set(terminalsre.findall(open(filename).read()))
 	else:
 		tokens = set(open(filename).read().split())
 	# iterate over set & assign IDs
@@ -138,7 +154,7 @@ def getmapping(filename, bracket=False):
 		revmapping[n] = a
 	return mapping, revmapping
 
-cdef UChar *buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
+cdef void buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
 	""" LCS algorithm, from Wikipedia pseudocode.
 	Builds chart of LCS lengths. """
 	cdef int n, m
@@ -159,7 +175,6 @@ cdef UChar *buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
 						if chart[(n - 1) * seq2.length + m] >
 						chart[n * seq2.length + (m - 1)]
 						else chart[n * seq2.length + (m - 1)])
-	return chart
 
 cdef void backtrack(UChar *chart, Sequence *seq1, Sequence *seq2,
 		int n, int m, Sequence *result):
@@ -205,10 +220,11 @@ cdef set backtrackAll(UChar *chart, Sequence *seq1, Sequence *seq2,
 cdef tuple getresult(Sequence *seq, dict revmapping):
 	""" Turn the array representation of a sentence back into a sequence of
 	string tokens. """
-	cdef int n
-	cdef list result = []
+	cdef:
+		int n
+		list result = []
 	# reverse the result
-	for n in range(seq.length - 1, - 1, -1):
+	for n in range(seq.length - 1, -1, -1):
 		result.append(revmapping[seq.tokens[n]])
 	return tuple(result)
 
