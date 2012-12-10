@@ -3,7 +3,8 @@ import sys, os
 from getopt import gnu_getopt, GetoptError
 from _lcs import Comparator
 
-USAGE = """usage: %s text1 text2 [--all] [--debug]
+USAGE = """usage: %s text1 text2 [text3 ... textn --batch dir] [--all] [--debug]
+
 text1 and text2 are filenames, each file containting
 one sentence per line, words space separated.
 Output will be a list of the longest common subsequences found
@@ -11,16 +12,14 @@ in each sentence pair, preceded by its occurrence frequency and a tab.
 
     --all       enable collection of all longest common subsequences.
     --debug     dump charts with lengths of common subsequences.
-    --batch dir compare text1 to an arbitrary number of other given texts, and
-                write the results to dir/A_B for file A compared to B.
+    --batch dir compare text1 to an arbitrary number of other given texts,
+                and write the results to dir/A_B for file A compared to B.
     --bracket   input is in the form of bracketed trees:
-                (S (DT one) (RB per) (NN line))
-    --quiet ignored
-""" % sys.argv[0]
+                (S (DT one) (RB per) (NN line))""" % sys.argv[0]
 
 def main():
 	# command line arguments
-	flags = ("quiet", "debug", "all", "bracket")
+	flags = ("debug", "all", "bracket")
 	options = ("batch=", )
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "", flags + options)
