@@ -13,7 +13,7 @@ Approach:
 """
 
 # Python imports
-import sys, os
+import sys, os, re
 from collections import Counter
 
 # Cython imports
@@ -25,6 +25,9 @@ cdef struct Sequence:
 	Token *tokens
 	size_t length
 
+# a terminal in a tree in bracket notation is anything between
+# a space and a closing paren; use group to extract only the terminal.
+terminalsre = re.compile(r" ([^ )]+)\)")
 
 cdef class Text(object):
 	""" Takes a file whose lines are sequences (e.g., sentences) of
@@ -35,10 +38,14 @@ cdef class Text(object):
 	cdef Token *tokens # this contiguous array will contain all tokens
 	cdef public size_t length, maxlen
 
-	def __init__(self, filename, mapping):
+	def __init__(self, filename, mapping, bracket=False):
 		cdef Token maxidx = max(mapping.values()) + 1
 		cdef size_t n, m, idx = 0
-		cdef list text = [a.split() for a in open(filename).read().splitlines()]
+		cdef list text
+		if bracket:
+			text = [terminalsre.findall(a) for a in open(filename)]
+		else:
+			text = [a.strip().split() for a in open(filename)]
 
 		self.length = len(text)
 		self.maxlen = max(map(len, text))
@@ -64,19 +71,74 @@ cdef class Text(object):
 			free(self.seqs)
 
 
-def getmapping(filename):
+cdef class Comparator(object):
+	cdef:
+		Text text1
+		dict mapping, revmapping
+
+	def __init__(self, filename, bracket=False):
+		self.mapping, self.revmapping = getmapping(filename, bracket)
+		self.text1 = Text(filename, self.mapping, bracket)
+
+	def getsequences(self, filename, getall=False, bracket=False, debug=False):
+		cdef Text text2
+		cdef UChar *chart
+		cdef Sequence result, *seq1, *seq2
+		cdef size_t n, m
+
+		# read data
+		text2 = Text(filename, self.mapping, bracket)
+		chart = <UChar *>malloc(self.text1.maxlen * text2.maxlen * sizeof(UChar))
+		assert chart is not NULL
+		result.tokens = <Token *>malloc(min(self.text1.maxlen, text2.maxlen)
+				* sizeof(result.tokens[0]))
+		assert result.tokens is not NULL
+
+		# find subsequences
+		results = Counter()
+		for n in range(self.text1.length):
+			seq1 = &(self.text1.seqs[n])
+			for m in range(text2.length):
+				seq2 = &(text2.seqs[m])
+				buildchart(chart, seq1, seq2)
+				if debug:
+					for n in range(seq1.length):
+						for m in range(seq2.length):
+							print chart[n * seq2.length + m],
+						print
+
+				if getall:
+					results.update(backtrackAll(chart, seq1, seq2,
+							seq1.length - 1, seq2.length - 1, self.revmapping))
+				else:
+					result.length = 0
+					backtrack(chart, seq1, seq2, seq1.length - 1, seq2.length - 1,
+							&result)
+					## increase count for the subsequence that was found
+					results[getresult(&result, self.revmapping)] += 1
+		# clean up
+		free(result.tokens)
+		free(chart)
+		del results[()]
+		return results
+
+def getmapping(filename, bracket=False):
 	""" Create a mapping of tokens to integers and back from a given file. """
 	# the sentinel token will be the empty string '' (used to indicate gaps)
 	mapping = {'': 0}
 	revmapping = {0: ''}
-	# split file into tokens and iterate over the set of them
-	for n, a in enumerate(set(open(filename).read().split()), 1):
+	# split file into tokens and turn into set
+	if bracket:
+		tokens = set(terminalsre.findall(open(filename).read()))
+	else:
+		tokens = set(open(filename).read().split())
+	# iterate over set & assign IDs
+	for n, a in enumerate(tokens, 1):
 		mapping[a] = n
 		revmapping[n] = a
 	return mapping, revmapping
 
-cdef UChar*buildchart(UChar*chart,
-		Sequence *seq1, Sequence *seq2):
+cdef UChar *buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
 	""" LCS algorithm, from Wikipedia pseudocode.
 	Builds chart of LCS lengths. """
 	cdef int n, m
@@ -150,46 +212,3 @@ cdef tuple getresult(Sequence *seq, dict revmapping):
 		result.append(revmapping[seq.tokens[n]])
 	return tuple(result)
 
-def getsequences(filename1, filename2, getall=False, debug=False):
-	cdef Text text1, text2
-	cdef UChar *chart
-	cdef Sequence result, *seq1, *seq2
-	cdef size_t n, m
-
-	# read data
-	mapping, revmapping = getmapping(filename1)
-	text1 = Text(filename1, mapping)
-	text2 = Text(filename2, mapping)
-	chart = <UChar *>malloc(text1.maxlen * text2.maxlen * sizeof(UChar))
-	assert chart is not NULL
-	result.tokens = <Token *>malloc(min(text1.maxlen, text2.maxlen)
-			* sizeof(result.tokens[0]))
-	assert result.tokens is not NULL
-
-	# find subsequences
-	results = Counter()
-	for n in range(text1.length):
-		seq1 = &(text1.seqs[n])
-		for m in range(text2.length):
-			seq2 = &(text2.seqs[m])
-			buildchart(chart, seq1, seq2)
-			if debug:
-				for n in range(seq1.length):
-					for m in range(seq2.length):
-						print chart[n * seq2.length + m],
-					print
-
-			if getall:
-				results.update(backtrackAll(chart, seq1, seq2,
-						seq1.length - 1, seq2.length - 1, revmapping))
-			else:
-				result.length = 0
-				backtrack(chart, seq1, seq2, seq1.length - 1, seq2.length - 1,
-						&result)
-				## increase count for the subsequence that was found
-				results[getresult(&result, revmapping)] += 1
-	# clean up
-	free(result.tokens)
-	free(chart)
-	del results[()]
-	return results
