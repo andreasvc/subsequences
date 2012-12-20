@@ -28,8 +28,10 @@ Usage:
     one sentence per line, words space separated.
     Output will be a list of the longest common subsequences found
     in each sentence pair, followed by its occurrence frequency and a tab.
-    When a single file is given, pairs of sequences <n, m> are compared,
-    except for pairs <n, n>.
+	Note that the output is space separated, like the input. Gaps are
+    represented by an empty token, and are thus marked by two consecutive
+	spaces. When a single file is given, pairs of sequences <n, m> are
+	compared, except for pairs <n, n>.
 
         --all       enable collection of all subsequences of maximum length;
                     by default an arbitrary longest subsequence is returned.
@@ -39,4 +41,17 @@ Usage:
         --bracket   input is in the form of bracketed trees:
                     (S (DT one) (RB per) (NN line))
         --pos       when --bracket is enabled, include POS tags with tokens.
+
+Example:
+--------
+
+    ~/subsequences $ head text*
+    ==> text1 <==
+    In winter Hammerfest is a thirty-hour ride by bus from Oslo, though why anyone would want to go there in winter is a question worth considering.
+    
+    ==> text2 <==
+    Through winter, rides between Oslo and Hammerfest use thirty hours up in a bus, though why travellers would select to ride there then might be pondered.
+
+    ~/subsequences $ python lcs.py text1 text2
+    Hammerfest  a  though why  would  to  there     1
 

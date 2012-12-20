@@ -10,8 +10,10 @@ text1 and text2 are filenames, each file containing
 one sentence per line, words space separated.
 Output will be a list of the longest common subsequences found
 in each sentence pair, followed by its occurrence frequency and a tab.
-When a single file is given, pairs of sequences <n, m> are compared,
-except for pairs <n, n>.
+Note that the output is space separated, like the input. Gaps are
+represented by an empty token, and are thus marked by two consecutive
+spaces. When a single file is given, pairs of sequences <n, m> are
+compared, except for pairs <n, n>.
 
     --all       enable collection of all subsequences of maximum length;
                 by default an arbitrary longest subsequence is returned.
