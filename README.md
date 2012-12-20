@@ -1,14 +1,13 @@
 subsequences
 ============
 
-Extract longest common subsequences from texts.
+Extract longest common subsequences from texts, along with frequencies.
 
 
 Requirements:
 -------------
 - Python 2.7+  http://www.python.org (need headers, e.g. python-dev package)
 - Cython       http://www.cython.org
-- GCC          http://gcc.gnu.org
 
 For example, to install these dependencies and compile the code on Ubuntu,
 issue the following commands:
@@ -23,14 +22,17 @@ issue the following commands:
 Usage:
 ------
 
-    python lcs.py text1 text2 [text3 ... textn --batch dir] [--all] [--debug]
+	python lcs.py text1 [text2 [text3 ... textn --batch dir]] [--all] [--debug]
 
-    text1 and text2 are filenames, each file containting
+    text1 and text2 are filenames, each file containing
     one sentence per line, words space separated.
     Output will be a list of the longest common subsequences found
-    in each sentence pair, preceded by its occurrence frequency and a tab.
+    in each sentence pair, followed by its occurrence frequency and a tab.
+    When a single file is given, pairs of sequences <n, m> are compared,
+    except for pairs <n, n>.
 
-        --all       enable collection of all longest common subsequences.
+        --all       enable collection of all subsequences of maximum length;
+                    by default an arbitrary longest subsequence is returned.
         --debug     dump charts with lengths of common subsequences.
         --batch dir compare text1 to an arbitrary number of other given texts,
                     and write the results to dir/A_B for file A compared to B.
