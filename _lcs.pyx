@@ -22,6 +22,8 @@ ctypedef unsigned char UChar
 ctypedef unsigned int Token
 
 cdef struct Sequence:
+	# Represents a sequence of tokens after it has been mapped to numeric
+	# identifiers.
 	Token *tokens
 	size_t length
 
@@ -80,6 +82,8 @@ cdef class Text(object):
 
 
 cdef class Comparator(object):
+	""" Load a file after which its longest common subsequences with respect
+	to other files can be extracted. """
 	cdef:
 		Text text1
 		dict mapping, revmapping
@@ -92,6 +96,8 @@ cdef class Comparator(object):
 		self.pos = pos
 
 	def getsequences(self, filename, getall=False, debug=False):
+		""" Get the longest common subsequences between the current file
+		and another. If filename is None, compare file against itself. """
 		cdef:
 			Text text2
 			UChar *chart
@@ -99,8 +105,12 @@ cdef class Comparator(object):
 			size_t n, m
 
 		# read data
-		text2 = Text(filename, self.mapping, self.bracket, self.pos)
-		chart = <UChar *>malloc(self.text1.maxlen * text2.maxlen * sizeof(UChar))
+		if filename is None:
+			text2 = self.text1
+		else:
+			text2 = Text(filename, self.mapping, self.bracket, self.pos)
+		chart = <UChar *>malloc(self.text1.maxlen * text2.maxlen
+				* sizeof(UChar))
 		assert chart is not NULL
 		result.tokens = <Token *>malloc(min(self.text1.maxlen, text2.maxlen)
 				* sizeof(result.tokens[0]))
@@ -112,20 +122,25 @@ cdef class Comparator(object):
 			seq1 = &(self.text1.seqs[n])
 			for m in range(text2.length):
 				seq2 = &(text2.seqs[m])
+				if seq1 is seq2:
+					continue
+
 				buildchart(chart, seq1, seq2)
 				if debug:
+					print "seq %d vs. seq %d" % (n, m)
 					for n in range(seq1.length):
 						for m in range(seq2.length):
 							print chart[n * seq2.length + m],
 						print
+					print
 
 				if getall:
-					results.update(backtrackAll(chart, seq1, seq2,
+					results.update(backtrackall(chart, seq1, seq2,
 							seq1.length - 1, seq2.length - 1, self.revmapping))
 				else:
 					result.length = 0
-					backtrack(chart, seq1, seq2, seq1.length - 1, seq2.length - 1,
-							&result)
+					backtrack(chart, seq1, seq2, seq1.length - 1,
+							seq2.length - 1, &result)
 					## increase count for the subsequence that was found
 					results[getresult(&result, self.revmapping)] += 1
 		# clean up
@@ -179,7 +194,9 @@ cdef void buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
 cdef void backtrack(UChar *chart, Sequence *seq1, Sequence *seq2,
 		int n, int m, Sequence *result):
 	""" extract tuple with LCS from chart and two sequences.
-	From Wikipedia pseudocode. """
+	From Wikipedia pseudocode.
+	NB: if there are multiple subsequences with the maximal length n,
+	an arbitrary one will be selected and extracted. """
 	if n == -1 or m == -1:
 		return
 	elif seq1.tokens[n] == seq2.tokens[m]:
@@ -197,7 +214,7 @@ cdef void backtrack(UChar *chart, Sequence *seq1, Sequence *seq2,
 	else:
 		backtrack(chart, seq1, seq2, n - 1, m, result)
 
-cdef set backtrackAll(UChar *chart, Sequence *seq1, Sequence *seq2,
+cdef set backtrackall(UChar *chart, Sequence *seq1, Sequence *seq2,
 		int n, int m, dict revmapping):
 	""" extract set of tuples with all LCSes from chart and two sequences.
 	This has exponentional worst case complexity since there can be
@@ -206,15 +223,15 @@ cdef set backtrackAll(UChar *chart, Sequence *seq1, Sequence *seq2,
 		return set([()])
 	elif seq1.tokens[n] == seq2.tokens[m]:
 		return set([seq + (revmapping[seq1.tokens[n]],)
-			for seq in backtrackAll(chart, seq1, seq2, n - 1, m - 1,
+			for seq in backtrackall(chart, seq1, seq2, n - 1, m - 1,
 			revmapping)])
 	elif (chart[n * seq2.length + (m - 1)]
 			>= chart[(n - 1) * seq2.length + m]):
-		result = backtrackAll(chart, seq1, seq2, n, m - 1, revmapping)
+		result = backtrackall(chart, seq1, seq2, n, m - 1, revmapping)
 	else: result = set()
 	if (chart[(n - 1) * seq2.length + m]
 			>= chart[n * seq2.length + (m - 1)]):
-		result.update(backtrackAll(chart, seq1, seq2, n - 1, m, revmapping))
+		result.update(backtrackall(chart, seq1, seq2, n - 1, m, revmapping))
 	return result
 
 cdef tuple getresult(Sequence *seq, dict revmapping):
