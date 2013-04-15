@@ -9,11 +9,10 @@ Approach:
   the special value n (being higher than any word occurring in the other text,
   so will never be part of a common subsequence).
 - now a sentence is represented as an integer array
-   => fast comparisons, low memory usage
-"""
+   => fast comparisons, low memory usage. """
 
 # Python imports
-import sys, os, re
+import re
 from collections import Counter
 
 # Cython imports
@@ -42,20 +41,23 @@ cdef class Text(object):
 		Token *tokens # this contiguous array will contain all tokens
 		public size_t length, maxlen
 
-	def __init__(self, filename, mapping, bracket=False, pos=False):
+	def __init__(self, filename, mapping, bracket=False, pos=False,
+			strfragment=False):
 		cdef:
 			Token maxidx = max(mapping.values()) + 1
 			size_t n, m, idx = 0
 			list text
-		if bracket:
-			if pos:
-				text = [["/".join(reversed(tagword))
-						for tagword in posterminalsre.findall(line)]
-						for line in open(filename)]
-			else:
-				text = [terminalsre.findall(line) for line in open(filename)]
+
+		if bracket and pos:
+			text = [["/".join(reversed(tagword))
+					for tagword in posterminalsre.findall(line)]
+					for line in open(filename)]
+		elif bracket:
+			text = [terminalsre.findall(line) for line in open(filename)]
 		else:
 			text = [line.strip().split() for line in open(filename)]
+		if strfragment:
+			text = [['#START#'] + sent + ['#STOP#'] for sent in text]
 
 		self.length = len(text)
 		self.maxlen = max(map(len, text))
@@ -64,6 +66,7 @@ cdef class Text(object):
 		self.tokens = <Token *>malloc(sum(map(len, text))
 				* sizeof(self.seqs.tokens[0]))
 		assert self.tokens is not NULL
+
 		for n, sent in enumerate(text):
 			self.seqs[n].tokens = &(self.tokens[idx])
 			for m, word in enumerate(sent):
@@ -77,8 +80,10 @@ cdef class Text(object):
 		""" Free memory. """
 		if self.tokens is not NULL:
 			free(self.tokens)
+			self.tokens = NULL
 		if self.seqs is not NULL:
 			free(self.seqs)
+			self.seqs = NULL
 
 
 cdef class Comparator(object):
@@ -86,14 +91,18 @@ cdef class Comparator(object):
 	to other files can be extracted. """
 	cdef:
 		Text text1
-		dict mapping, revmapping
-		bint bracket, pos
+		dict mapping
+		list revmapping
+		bint bracket, pos, strfragment
 
-	def __init__(self, filename, bracket=False, pos=False):
-		self.mapping, self.revmapping = getmapping(filename, bracket, pos)
-		self.text1 = Text(filename, self.mapping, bracket, pos)
+	def __init__(self, filename, bracket=False, pos=False,
+			strfragment=False):
+		self.mapping, self.revmapping = getmapping(filename, bracket, pos,
+				strfragment)
+		self.text1 = Text(filename, self.mapping, bracket, pos, strfragment)
 		self.bracket = bracket
 		self.pos = pos
+		self.strfragment = strfragment
 
 	def getsequences(self, filename, getall=False, debug=False):
 		""" Get the longest common subsequences between the current file
@@ -102,7 +111,9 @@ cdef class Comparator(object):
 			Text text2
 			UChar *chart
 			Sequence result, *seq1, *seq2
-			size_t n, m
+			int n, m
+		if getall and self.strfragment:
+			raise NotImplemented
 
 		# read data
 		if filename is None:
@@ -141,32 +152,58 @@ cdef class Comparator(object):
 					result.length = 0
 					backtrack(chart, seq1, seq2, seq1.length - 1,
 							seq2.length - 1, &result)
-					## increase count for the subsequence that was found
-					results[getresult(&result, self.revmapping)] += 1
+					if debug:
+						for n in range(result.length - 1, -1, -1):
+							print "%d/%s" % (result.tokens[n],
+									self.revmapping[result.tokens[n]]
+									if result.tokens[n] < len(self.revmapping)
+									else 'ERROR'),
+						print
+					if self.strfragment and result.length:
+						n = result.length - 1
+						m = 1 # number of non-gap tokens
+						result.length = 0
+						# find index of first two consecutive tokens
+						while n:
+							if result.tokens[n]:
+								m += 1
+								if result.tokens[n - 1] and result.length == 0:
+									result.length = n + 1
+							n -= 1
+						if m < 3:
+							result.length = 0
+						elif result.tokens[1] == 0:
+							# remove redundant '<gap> #STOP#' sequence
+							for n in range(result.length):
+								result.tokens[n] = result.tokens[n + 2]
+							result.length -= 2
+					# increase count for the subsequence that was found
+					if result.length:
+						results[getresult(&result, self.revmapping)] += 1
 		# clean up
 		free(result.tokens)
 		free(chart)
-		del results[()]
+		result.tokens = chart = NULL
+		if () in results:
+			del results[()]
 		return results
 
-def getmapping(filename, bracket=False, pos=False):
+def getmapping(filename, bracket=False, pos=False, strfragment=False):
 	""" Create a mapping of tokens to integers and back from a given file. """
-	# the sentinel token will be the empty string '' (used to indicate gaps)
-	mapping = {'': 0}
-	revmapping = {0: ''}
 	# split file into tokens and turn into set
-	if bracket:
-		if pos:
-			tokens = set(["/".join(reversed(tagword)) for tagword
-					in posterminalsre.findall(open(filename).read())])
-		else:
-			tokens = set(terminalsre.findall(open(filename).read()))
+	if bracket and pos:
+		tokens = set(["/".join(reversed(tagword)) for tagword
+				in posterminalsre.findall(open(filename).read())])
+	elif bracket:
+		tokens = set(terminalsre.findall(open(filename).read()))
 	else:
 		tokens = set(open(filename).read().split())
-	# iterate over set & assign IDs
-	for n, a in enumerate(tokens, 1):
-		mapping[a] = n
-		revmapping[n] = a
+	# the empty string '' is used as sentinel token (indicates a gap)
+	revmapping = ['']
+	if strfragment:
+		revmapping.extend(['#START#', '#STOP#'])
+	revmapping.extend(tokens)
+	mapping = {a: n for n, a in enumerate(revmapping)}
 	return mapping, revmapping
 
 cdef void buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
@@ -215,7 +252,7 @@ cdef void backtrack(UChar *chart, Sequence *seq1, Sequence *seq2,
 		backtrack(chart, seq1, seq2, n - 1, m, result)
 
 cdef set backtrackall(UChar *chart, Sequence *seq1, Sequence *seq2,
-		int n, int m, dict revmapping):
+		int n, int m, list revmapping):
 	""" extract set of tuples with all LCSes from chart and two sequences.
 	This has exponentional worst case complexity since there can be
 	exponentionally many longest common subsequences. """
@@ -234,14 +271,13 @@ cdef set backtrackall(UChar *chart, Sequence *seq1, Sequence *seq2,
 		result.update(backtrackall(chart, seq1, seq2, n - 1, m, revmapping))
 	return result
 
-cdef tuple getresult(Sequence *seq, dict revmapping):
+cdef tuple getresult(Sequence *seq, list revmapping):
 	""" Turn the array representation of a sentence back into a sequence of
 	string tokens. """
 	cdef:
 		int n
-		list result = []
-	# reverse the result
-	for n in range(seq.length - 1, -1, -1):
-		result.append(revmapping[seq.tokens[n]])
+		list result
+	# map tokens to strings; reverse the result
+	result = [revmapping[seq.tokens[n]] for n in range(seq.length - 1, -1, -1)]
 	return tuple(result)
 

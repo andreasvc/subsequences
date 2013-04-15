@@ -1,13 +1,11 @@
 """ Generic setup.py for Cython code. """
 from distutils.core import setup
-from distutils.extension import Extension
+from Cython.Distutils import build_ext
 from Cython.Build import cythonize
 from Cython.Compiler import Options
-#import cython, numpy
 
-# some of these directives increase performance,
-# but at the cost of failing in mysterious ways.
-cython_directives = dict(
+# for debbuging, set wraparound and boundscheck to True
+DIRECTIVES = dict(
 	profile=False,
 	cdivision=True,
 	nonecheck=False,
@@ -16,20 +14,14 @@ cython_directives = dict(
 	embedsignature=True,
 )
 
-#Options.fast_fail = True
-Options.extra_compile_args = ["-O3"],
-Options.extra_link_args = ["-O3"], #["-g"],
+Options.extra_compile_args = ["-O3"]
+Options.extra_link_args = ["-O3"] #["-g"]
 if __name__ == '__main__':
-	setup(
-		name = 'subsequences',
-		#include_dirs = [numpy.get_include()], #cythonutils],
-		ext_modules = cythonize(
-			[Extension('*', ['*.pyx'],
-				extra_compile_args=["-O3"],
-				extra_link_args=["-O3"], #["-g"],
-			)],
+	setup(name = 'subsequences',
+		cmdclass = dict(build_ext=build_ext),
+		ext_modules = cythonize('*.pyx',
 			nthreads=4,
 			annotate=True,
-			cython_directives=cython_directives,
+			compiler_directives=DIRECTIVES,
 			)
 	)
