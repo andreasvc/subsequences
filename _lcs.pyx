@@ -24,12 +24,17 @@ cdef struct Sequence:
 	# Represents a sequence of tokens after it has been mapped to numeric
 	# identifiers.
 	Token *tokens
-	size_t length
+	long length
+
+DEF GAP = 0
+DEF START = 1
+DEF STOP = 2
 
 # a terminal in a tree in bracket notation is anything between
 # a space and a closing paren; use group to extract only the terminal.
 terminalsre = re.compile(r" ([^ )]+)\)")
 posterminalsre = re.compile(r"\(([^ )]+) ([^ )]+)\)")
+
 
 cdef class Text(object):
 	""" Takes a file whose lines are sequences (e.g., sentences) of
@@ -39,13 +44,13 @@ cdef class Text(object):
 	cdef:
 		Sequence *seqs
 		Token *tokens # this contiguous array will contain all tokens
-		public size_t length, maxlen
+		public long length, maxlen
 
 	def __init__(self, filename, mapping, bracket=False, pos=False,
 			strfragment=False):
 		cdef:
 			Token maxidx = max(mapping.values()) + 1
-			size_t n, m, idx = 0
+			long n, m, idx = 0
 			list text
 
 		if bracket and pos:
@@ -113,7 +118,7 @@ cdef class Comparator(object):
 			Sequence result, *seq1, *seq2
 			int n, m
 		if getall and self.strfragment:
-			raise NotImplemented
+			raise NotImplementedError
 
 		# read data
 		if filename is None:
@@ -159,26 +164,9 @@ cdef class Comparator(object):
 									if result.tokens[n] < len(self.revmapping)
 									else 'ERROR'),
 						print
-					if self.strfragment and result.length:
-						n = result.length - 1
-						m = 1 # number of non-gap tokens
-						result.length = 0
-						# find index of first two consecutive tokens
-						while n:
-							if result.tokens[n]:
-								m += 1
-								if result.tokens[n - 1] and result.length == 0:
-									result.length = n + 1
-							n -= 1
-						if m < 3:
-							result.length = 0
-						elif result.tokens[1] == 0:
-							# remove redundant '<gap> #STOP#' sequence
-							for n in range(result.length):
-								result.tokens[n] = result.tokens[n + 2]
-							result.length -= 2
 					# increase count for the subsequence that was found
-					if result.length:
+					if (result.length and (not self.strfragment
+							or self.makestrfragment(&result))):
 						results[getresult(&result, self.revmapping)] += 1
 		# clean up
 		free(result.tokens)
@@ -187,6 +175,32 @@ cdef class Comparator(object):
 		if () in results:
 			del results[()]
 		return results
+
+	cdef inline bint makestrfragment(self, Sequence *result):
+		""" Peel away tokens until sequence is a string fragment;
+		or return False when not enough tokens remain. """
+		cdef:
+			int n = result.length - 1  # idx of first token
+			int m = 2  # number of non-gap tokens
+		result.length = 0
+		# find index of first two consecutive tokens
+		# FIXME: might as well do this before making chart
+		while n:
+			if result.tokens[n]:
+				if result.length:
+					m += 1
+				elif result.tokens[n - 1]:
+					result.length = n + 1
+			n -= 1
+		if result.tokens[1] == GAP and result.tokens[0] == STOP:
+			# remove redundant '<gap> #STOP#' sequence
+			for n in range(result.length):
+				result.tokens[n] = result.tokens[n + 2]
+			result.length -= 2
+			m -= 1
+		if m < 3:
+			return False
+		return result.length > 0
 
 def getmapping(filename, bracket=False, pos=False, strfragment=False):
 	""" Create a mapping of tokens to integers and back from a given file. """
@@ -205,6 +219,7 @@ def getmapping(filename, bracket=False, pos=False, strfragment=False):
 	revmapping.extend(tokens)
 	mapping = {a: n for n, a in enumerate(revmapping)}
 	return mapping, revmapping
+
 
 cdef void buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
 	""" LCS algorithm, from Wikipedia pseudocode.
@@ -228,6 +243,7 @@ cdef void buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
 						chart[n * seq2.length + (m - 1)]
 						else chart[n * seq2.length + (m - 1)])
 
+
 cdef void backtrack(UChar *chart, Sequence *seq1, Sequence *seq2,
 		int n, int m, Sequence *result):
 	""" extract tuple with LCS from chart and two sequences.
@@ -244,12 +260,13 @@ cdef void backtrack(UChar *chart, Sequence *seq1, Sequence *seq2,
 			> chart[(n - 1) * seq2.length + m]):
 		# add token to indicate gap here; avoid repeats.
 		# the gaps are always wrt to the first sequence
-		if result.length and result.tokens[result.length - 1] != 0:
-			result.tokens[result.length] = 0
+		if result.length and result.tokens[result.length - 1] != GAP:
+			result.tokens[result.length] = GAP
 			result.length += 1
 		backtrack(chart, seq1, seq2, n, m - 1, result)
 	else:
 		backtrack(chart, seq1, seq2, n - 1, m, result)
+
 
 cdef set backtrackall(UChar *chart, Sequence *seq1, Sequence *seq2,
 		int n, int m, list revmapping):
@@ -270,6 +287,7 @@ cdef set backtrackall(UChar *chart, Sequence *seq1, Sequence *seq2,
 			>= chart[n * seq2.length + (m - 1)]):
 		result.update(backtrackall(chart, seq1, seq2, n - 1, m, revmapping))
 	return result
+
 
 cdef tuple getresult(Sequence *seq, list revmapping):
 	""" Turn the array representation of a sentence back into a sequence of

@@ -1,5 +1,6 @@
 """ Longest common subsequence for two texts. """
-import sys, os
+import os
+import sys
 from getopt import gnu_getopt, GetoptError
 from _lcs import Comparator
 
@@ -9,7 +10,7 @@ usage: %s text1 [text2 [text3 ... textn --batch dir]] [--all] [--debug]
 text1 and text2 are filenames, each file containing
 one sentence per line, words space separated.
 Output will be a list of the longest common subsequences found
-in each sentence pair, followed by its occurrence frequency and a tab.
+in each sentence pair, followed by a tab and its occurrence frequency.
 Note that the output is space separated, like the input. Gaps are
 represented by an empty token, and are thus marked by two consecutive
 spaces. When a single file is given, pairs of sequences <n, m> are
@@ -23,9 +24,10 @@ compared, except for pairs <n, n>.
     --bracket      input is in the form of bracketed trees:
                    (S (DT one) (RB per) (NN line))
     --pos          when --bracket is enabled, include POS tags with tokens.
-	--strfragment  sentences include START & STOP symbols and subsequences must
+    --strfragment  sentences include START & STOP symbols and subsequences must
                    consist of 3 or more tokens and begin with at least 2 tokens.
 """ % sys.argv[0]
+
 
 def main():
 	""" Parse command line arguments, get subsequences, dump to stdout/file. """
@@ -42,8 +44,8 @@ def main():
 		else:
 			assert len(args) >= 2, "wrong number of arguments"
 		for n, filename in enumerate(args):
-			assert os.path.exists(filename), "file %d not found: %r" % (
-					n + 1, filename)
+			assert os.path.exists(filename), (
+					"file %d not found: %r" % (n + 1, filename))
 	except (GetoptError, AssertionError) as err:
 		print err, USAGE
 		return
