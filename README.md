@@ -22,7 +22,7 @@ issue the following commands:
 Usage:
 ------
 
-	python lcs.py text1 [text2 [text3 ... textn --batch dir]] [--all] [--debug]
+	python subseq.py text1 [text2 [text3 ... textn --batch dir]] [--all] [--debug]
 
     text1 and text2 are filenames, each file containing
     one sentence per line, words space separated.
@@ -52,6 +52,6 @@ Example:
     ==> text2 <==
     Through winter, rides between Oslo and Hammerfest use thirty hours up in a bus, though why travellers would select to ride there then might be pondered.
 
-    ~/subsequences $ python lcs.py text1 text2
+    ~/subsequences $ python subseq.py text1 text2
     Hammerfest  a  though why  would  to  there     1
 

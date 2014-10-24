@@ -1,8 +1,10 @@
 """ Longest common subsequence for two texts. """
 import os
 import sys
+import itertools
 from getopt import gnu_getopt, GetoptError
-from _lcs import Comparator
+from lcs import LCSComparator
+from parallelsubstr import ParallelComparator  # , dumptable
 
 USAGE = """
 usage: %s text1 [text2 [text3 ... textn --batch dir]] [--all] [--debug]
@@ -24,15 +26,17 @@ compared, except for pairs <n, n>.
     --bracket      input is in the form of bracketed trees:
                    (S (DT one) (RB per) (NN line))
     --pos          when --bracket is enabled, include POS tags with tokens.
-    --strfragment  sentences include START & STOP symbols and subsequences must
-                   consist of 3 or more tokens and begin with at least 2 tokens.
+    --strfragment  sentences include START & STOP symbols, subsequences must
+                   consist of 3 or more tokens, begin with at least 2 tokens.
+    --parallel     read sentence aligned corpus and produce table of parallel
+                   substrings and the sentence indices in which they occur.
 """ % sys.argv[0]
 
 
 def main():
-	""" Parse command line arguments, get subsequences, dump to stdout/file. """
+	"""Parse command line arguments, get subsequences, dump to stdout/file."""
 	# command line arguments
-	flags = ('debug', 'all', 'bracket', 'pos', 'strfragment')
+	flags = ('debug', 'all', 'bracket', 'pos', 'strfragment', 'parallel')
 	options = ('batch=', )
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
@@ -52,7 +56,14 @@ def main():
 
 	# read first text
 	filename1 = args[0]
-	comparator = Comparator(filename1,
+	if '--parallel' in opts:
+		comparator = ParallelComparator(filename1)
+		results = comparator.getsequences(args[1],
+				minmatchsize=2)
+		# dumptable(results, outfile)
+		return
+
+	comparator = LCSComparator(filename1,
 			bracket='--bracket' in opts, pos='--pos' in opts,
 			strfragment='--strfragment' in opts)
 
@@ -76,6 +87,16 @@ def main():
 					for subseq, count in results.iteritems())
 			if '--batch' in opts:
 				outfile.close()
+
+
+def dumptable(results, out):
+	for length, srcmatches in itertools.groupby(
+			sorted(results, key=len), key=len):
+		out.write('%d:\n' % length)
+		for srcmatch in srcmatches:
+			out.write('\t%s\n' % ' '.join(srcmatch))
+			for targetmatch, idx in results[srcmatch].iteritems():
+				out.write('\t\t%s\t%s\n' % (' '.join(targetmatch), idx))
 
 if __name__ == '__main__':
 	main()

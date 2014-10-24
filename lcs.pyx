@@ -1,69 +1,40 @@
-""" Extract Longest common subsequences from texts
-
-Approach:
-- given two files, take smallest one and base dictionary on it
-- files are tokenized into words and sentences,
-- one sent per line, tokens space separated
-- dictionary is a mapping of words to nonzero integer IDs
-- all words from the other text that are not in this dictionary are mapped to
-  the special value n (being higher than any word occurring in the other text,
-  so will never be part of a common subsequence).
-- now a sentence is represented as an integer array
-   => fast comparisons, low memory usage. """
+"""Extract Longest common subsequences from texts."""
 
 # Python imports
-import re
 from collections import Counter
-from corpus import getmapping
 
 # Cython imports
 from libc.stdlib cimport malloc, free
-from corpus cimport Text, UChar, Token, Sequence
+from corpus cimport Text, UChar, Token, Sequence, Comparator
 include "constants.pxi"
 
 
-cdef class Comparator(object):
-	""" Load a file after which its longest common subsequences with respect
-	to other files can be extracted. """
-	cdef:
-		Text text1
-		dict mapping
-		list revmapping
-		bint bracket, pos, strfragment
-
-	def __init__(self, filename, bracket=False, pos=False,
-			strfragment=False):
-		self.mapping, self.revmapping = getmapping(filename, bracket, pos,
-				strfragment)
-		self.text1 = Text(filename, self.mapping, bracket, pos, strfragment)
-		self.bracket = bracket
-		self.pos = pos
-		self.strfragment = strfragment
-
+cdef class LCSComparator(Comparator):
+	"""Load a file after which its longest common subsequences with respect
+	to other files can be extracted."""
 	def getsequences(self, filename, getall=False, debug=False):
-		""" Get the longest common subsequences between the current file
-		and another. If filename is None, compare file against itself. """
+		"""Get the longest common subsequences between the current file
+		and another. If filename is None, compare file against itself."""
 		cdef:
 			Text text2
 			UChar *chart
 			Sequence result
 			Sequence *seq1
 			Sequence *seq2
-			int n, m
+			size_t n, m
+
 		if getall and self.strfragment:
 			raise NotImplementedError
 
-		# read data
-		if filename is None:
-			text2 = self.text1
-		else:
-			text2 = Text(filename, self.mapping, self.bracket, self.pos)
+		text2 = self.readother(filename)
 		chart = <UChar *>malloc(self.text1.maxlen * text2.maxlen
 				* sizeof(UChar))
-		assert chart is not NULL
+		if chart is NULL:
+			raise MemoryError
 		result.tokens = <Token *>malloc(min(self.text1.maxlen, text2.maxlen)
 				* sizeof(result.tokens[0]))
-		assert result.tokens is not NULL
+		if result.tokens is NULL:
+			raise MemoryError
 
 		# find subsequences
 		results = Counter()
@@ -100,7 +71,7 @@ cdef class Comparator(object):
 					# increase count for the subsequence that was found
 					if (result.length and (not self.strfragment
 							or self.makestrfragment(&result))):
-						results[getresult(&result, self.revmapping)] += 1
+						results[self.getresult(&result)] += 1
 		# clean up
 		free(result.tokens)
 		free(chart)
@@ -110,8 +81,8 @@ cdef class Comparator(object):
 		return results
 
 	cdef inline bint makestrfragment(self, Sequence *result):
-		""" Peel away tokens until sequence is a string fragment;
-		or return False when not enough tokens remain. """
+		"""Peel away tokens until sequence is a string fragment;
+		or return False when not enough tokens remain."""
 		cdef:
 			int n = result.length - 1  # idx of first token
 			int m = 2  # number of non-gap tokens
@@ -137,8 +108,8 @@ cdef class Comparator(object):
 
 
 cdef void buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
-	""" LCS algorithm, from Wikipedia pseudocode.
-	Builds chart of LCS lengths. """
+	"""LCS algorithm, from Wikipedia pseudocode.
+	Builds chart of LCS lengths."""
 	cdef int n, m
 
 	# initialize first row & first column, then loop over rest
@@ -155,16 +126,16 @@ cdef void buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
 				chart[n * seq2.length + m] = (
 						chart[(n - 1) * seq2.length + m]
 						if chart[(n - 1) * seq2.length + m] >
-						chart[n * seq2.length + (m - 1)]
+							chart[n * seq2.length + (m - 1)]
 						else chart[n * seq2.length + (m - 1)])
 
 
 cdef void backtrack(UChar *chart, Sequence *seq1, Sequence *seq2,
 		int n, int m, Sequence *result):
-	""" extract tuple with LCS from chart and two sequences.
+	"""extract tuple with LCS from chart and two sequences.
 	From Wikipedia pseudocode.
 	NB: if there are multiple subsequences with the maximal length n,
-	an arbitrary one will be selected and extracted. """
+	an arbitrary one will be selected and extracted."""
 	if n == -1 or m == -1:
 		return
 	elif seq1.tokens[n] == seq2.tokens[m]:
@@ -185,9 +156,9 @@ cdef void backtrack(UChar *chart, Sequence *seq1, Sequence *seq2,
 
 cdef set backtrackall(UChar *chart, Sequence *seq1, Sequence *seq2,
 		int n, int m, list revmapping):
-	""" extract set of tuples with all LCSes from chart and two sequences.
+	"""extract set of tuples with all LCSes from chart and two sequences.
 	This has exponentional worst case complexity since there can be
-	exponentionally many longest common subsequences. """
+	exponentionally many longest common subsequences."""
 	if n == -1 or m == -1:
 		return set([()])
 	elif seq1.tokens[n] == seq2.tokens[m]:
@@ -202,14 +173,3 @@ cdef set backtrackall(UChar *chart, Sequence *seq1, Sequence *seq2,
 			>= chart[n * seq2.length + (m - 1)]):
 		result.update(backtrackall(chart, seq1, seq2, n - 1, m, revmapping))
 	return result
-
-
-cdef tuple getresult(Sequence *seq, list revmapping):
-	""" Turn the array representation of a sentence back into a sequence of
-	string tokens. """
-	cdef:
-		int n
-		list result
-	# map tokens to strings; reverse the result
-	result = [revmapping[seq.tokens[n]] for n in range(seq.length - 1, -1, -1)]
-	return tuple(result)

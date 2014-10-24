@@ -1,4 +1,16 @@
-"""Load a corpus and store as array of integers."""
+"""Load a corpus and store as array of integers.
+
+Approach:
+- given two files, take smallest one and base dictionary on it
+- files are tokenized into words and sentences,
+- one sent per line, tokens space separated
+- dictionary is a mapping of words to nonzero integer IDs
+- all words from the other text that are not in this dictionary are mapped to
+  the special value n (being higher than any word occurring in the other text,
+  so will never be part of a common subsequence).
+- now a sentence is represented as an integer array
+   => fast comparisons, low memory usage.
+"""
 
 import re
 
@@ -55,6 +67,37 @@ cdef class Text(object):
 		if self.seqs is not NULL:
 			free(self.seqs)
 			self.seqs = NULL
+
+
+cdef class Comparator(object):
+	"""A base class for comparing two Texts to each other."""
+	def __init__(self, filename, bracket=False, pos=False,
+			strfragment=False):
+		self.mapping, self.revmapping = getmapping(filename, bracket, pos,
+				strfragment)
+		self.text1 = Text(filename, self.mapping, bracket, pos, strfragment)
+		self.bracket = bracket
+		self.pos = pos
+		self.strfragment = strfragment
+
+	cdef Text readother(self, filename):
+		"""Load the second Text; if filename is None, compare to first text."""
+		if filename is None:
+			text2 = self.text1
+		else:
+			text2 = Text(filename, self.mapping, self.bracket, self.pos)
+		return text2
+
+	cdef tuple getresult(self, Sequence *seq):
+		"""Turn the array representation of a sentence back into a sequence of
+		string tokens."""
+		cdef:
+			int n
+			list result
+		# map tokens to strings; reverse the result
+		result = [self.revmapping[seq.tokens[n]]
+				for n in range(seq.length - 1, -1, -1)]
+		return tuple(result)
 
 
 def getmapping(filename, bracket=False, pos=False, strfragment=False):

@@ -11,11 +11,19 @@ cdef struct Sequence:
 	# Represents a sequence of tokens after it has been mapped to numeric
 	# identifiers.
 	Token *tokens
-	size_t length
+	int length
 
 
 cdef class Text(object):
 	cdef Sequence *seqs
 	cdef Token *tokens # this contiguous array will contain all tokens
-	cdef public size_t length, maxlen
+	cdef public int length, maxlen
 
+
+cdef class Comparator(object):
+	cdef Text text1
+	cdef dict mapping
+	cdef list revmapping
+	cdef bint bracket, pos, strfragment
+	cdef Text readother(self, filename)
+	cdef tuple getresult(self, Sequence *seq)
