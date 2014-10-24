@@ -14,81 +14,12 @@ Approach:
 # Python imports
 import re
 from collections import Counter
+from corpus import getmapping
 
 # Cython imports
 from libc.stdlib cimport malloc, free
-ctypedef unsigned char UChar
-ctypedef unsigned int Token
-
-cdef struct Sequence:
-	# Represents a sequence of tokens after it has been mapped to numeric
-	# identifiers.
-	Token *tokens
-	long length
-
-DEF GAP = 0
-DEF START = 1
-DEF STOP = 2
-
-# a terminal in a tree in bracket notation is anything between
-# a space and a closing paren; use group to extract only the terminal.
-terminalsre = re.compile(r" ([^ )]+)\)")
-posterminalsre = re.compile(r"\(([^ )]+) ([^ )]+)\)")
-
-
-cdef class Text(object):
-	""" Takes a file whose lines are sequences (e.g., sentences) of
-	space-delimeted tokens (e.g., words), and compiles it into an array with
-	tokens mapped to integers, according to the given mapping. """
-
-	cdef:
-		Sequence *seqs
-		Token *tokens # this contiguous array will contain all tokens
-		public long length, maxlen
-
-	def __init__(self, filename, mapping, bracket=False, pos=False,
-			strfragment=False):
-		cdef:
-			Token maxidx = max(mapping.values()) + 1
-			long n, m, idx = 0
-			list text
-
-		if bracket and pos:
-			text = [["/".join(reversed(tagword))
-					for tagword in posterminalsre.findall(line)]
-					for line in open(filename)]
-		elif bracket:
-			text = [terminalsre.findall(line) for line in open(filename)]
-		else:
-			text = [line.strip().split() for line in open(filename)]
-		if strfragment:
-			text = [['#START#'] + sent + ['#STOP#'] for sent in text]
-
-		self.length = len(text)
-		self.maxlen = max(map(len, text))
-		self.seqs = <Sequence *>malloc(len(text) * sizeof(Sequence))
-		assert self.seqs is not NULL
-		self.tokens = <Token *>malloc(sum(map(len, text))
-				* sizeof(self.seqs.tokens[0]))
-		assert self.tokens is not NULL
-
-		for n, sent in enumerate(text):
-			self.seqs[n].tokens = &(self.tokens[idx])
-			for m, word in enumerate(sent):
-				# NB: if word is not part of mapping,
-				# it gets an integer which will never match.
-				self.seqs[n].tokens[m] = mapping.get(word, maxidx)
-			self.seqs[n].length = len(sent)
-			idx += len(sent)
-
-	def __dealloc__(self):
-		""" Free memory. """
-		if self.tokens is not NULL:
-			free(self.tokens)
-			self.tokens = NULL
-		if self.seqs is not NULL:
-			free(self.seqs)
-			self.seqs = NULL
+from corpus cimport Text, UChar, Token, Sequence
+include "constants.pxi"
 
 
 cdef class Comparator(object):
@@ -115,7 +46,9 @@ cdef class Comparator(object):
 		cdef:
 			Text text2
 			UChar *chart
-			Sequence result, *seq1, *seq2
+			Sequence result
+			Sequence *seq1
+			Sequence *seq2
 			int n, m
 		if getall and self.strfragment:
 			raise NotImplementedError
@@ -202,24 +135,6 @@ cdef class Comparator(object):
 			return False
 		return result.length > 0
 
-def getmapping(filename, bracket=False, pos=False, strfragment=False):
-	""" Create a mapping of tokens to integers and back from a given file. """
-	# split file into tokens and turn into set
-	if bracket and pos:
-		tokens = set(["/".join(reversed(tagword)) for tagword
-				in posterminalsre.findall(open(filename).read())])
-	elif bracket:
-		tokens = set(terminalsre.findall(open(filename).read()))
-	else:
-		tokens = set(open(filename).read().split())
-	# the empty string '' is used as sentinel token (indicates a gap)
-	revmapping = ['']
-	if strfragment:
-		revmapping.extend(['#START#', '#STOP#'])
-	revmapping.extend(tokens)
-	mapping = {a: n for n, a in enumerate(revmapping)}
-	return mapping, revmapping
-
 
 cdef void buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
 	""" LCS algorithm, from Wikipedia pseudocode.
@@ -298,4 +213,3 @@ cdef tuple getresult(Sequence *seq, list revmapping):
 	# map tokens to strings; reverse the result
 	result = [revmapping[seq.tokens[n]] for n in range(seq.length - 1, -1, -1)]
 	return tuple(result)
-
