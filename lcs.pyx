@@ -5,7 +5,7 @@ from collections import Counter
 
 # Cython imports
 from libc.stdlib cimport malloc, free
-from corpus cimport Text, UChar, Token, Sequence, Comparator
+from corpus cimport Text, Token, Sequence, SeqIdx, Comparator
 include "constants.pxi"
 
 
@@ -17,7 +17,7 @@ cdef class LCSComparator(Comparator):
 		and another. If filename is None, compare file against itself."""
 		cdef:
 			Text text2
-			UChar *chart
+			SeqIdx *chart
 			Sequence result
 			Sequence *seq1
 			Sequence *seq2
@@ -27,8 +27,8 @@ cdef class LCSComparator(Comparator):
 			raise NotImplementedError
 
 		text2 = self.readother(filename)
-		chart = <UChar *>malloc(self.text1.maxlen * text2.maxlen
-				* sizeof(UChar))
+		chart = <SeqIdx *>malloc(self.text1.maxlen * text2.maxlen
+				* sizeof(SeqIdx))
 		if chart is NULL:
 			raise MemoryError
 		result.tokens = <Token *>malloc(min(self.text1.maxlen, text2.maxlen)
@@ -107,7 +107,7 @@ cdef class LCSComparator(Comparator):
 		return result.length > 0
 
 
-cdef void buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
+cdef void buildchart(SeqIdx *chart, Sequence *seq1, Sequence *seq2):
 	"""LCS algorithm, from Wikipedia pseudocode.
 	Builds chart of LCS lengths."""
 	cdef int n, m
@@ -130,7 +130,7 @@ cdef void buildchart(UChar *chart, Sequence *seq1, Sequence *seq2):
 						else chart[n * seq2.length + (m - 1)])
 
 
-cdef void backtrack(UChar *chart, Sequence *seq1, Sequence *seq2,
+cdef void backtrack(SeqIdx *chart, Sequence *seq1, Sequence *seq2,
 		int n, int m, Sequence *result):
 	"""extract tuple with LCS from chart and two sequences.
 	From Wikipedia pseudocode.
@@ -154,7 +154,7 @@ cdef void backtrack(UChar *chart, Sequence *seq1, Sequence *seq2,
 		backtrack(chart, seq1, seq2, n - 1, m, result)
 
 
-cdef set backtrackall(UChar *chart, Sequence *seq1, Sequence *seq2,
+cdef set backtrackall(SeqIdx *chart, Sequence *seq1, Sequence *seq2,
 		int n, int m, list revmapping):
 	"""extract set of tuples with all LCSes from chart and two sequences.
 	This has exponentional worst case complexity since there can be

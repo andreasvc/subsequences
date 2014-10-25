@@ -4,7 +4,7 @@ import sys
 import itertools
 from getopt import gnu_getopt, GetoptError
 from lcs import LCSComparator
-from parallelsubstr import ParallelComparator  # , dumptable
+from parallelsubstr import ParallelComparator
 
 USAGE = """
 usage: %s text1 [text2 [text3 ... textn --batch dir]] [--all] [--debug]
@@ -59,8 +59,8 @@ def main():
 	if '--parallel' in opts:
 		comparator = ParallelComparator(filename1)
 		results = comparator.getsequences(args[1],
-				minmatchsize=2)
-		# dumptable(results, outfile)
+				minmatchsize=2, debug='--debug' in opts)
+		comparator.dumptable(results, outfile)
 		return
 
 	comparator = LCSComparator(filename1,
@@ -88,15 +88,6 @@ def main():
 			if '--batch' in opts:
 				outfile.close()
 
-
-def dumptable(results, out):
-	for length, srcmatches in itertools.groupby(
-			sorted(results, key=len), key=len):
-		out.write('%d:\n' % length)
-		for srcmatch in srcmatches:
-			out.write('\t%s\n' % ' '.join(srcmatch))
-			for targetmatch, idx in results[srcmatch].iteritems():
-				out.write('\t\t%s\t%s\n' % (' '.join(targetmatch), idx))
 
 if __name__ == '__main__':
 	main()

@@ -1,8 +1,8 @@
 
 # Cython imports
 from libc.stdlib cimport malloc, free
-from libc.stdint cimport uint8_t, uint32_t
-ctypedef uint8_t UChar
+from libc.stdint cimport uint16_t, uint32_t
+ctypedef uint16_t SeqIdx
 ctypedef uint32_t Token
 include "constants.pxi"
 
@@ -25,5 +25,5 @@ cdef class Comparator(object):
 	cdef dict mapping
 	cdef list revmapping
 	cdef bint bracket, pos, strfragment
-	cdef Text readother(self, filename)
+	cdef Text readother(self, filename, bint storetokens=*)
 	cdef tuple getresult(self, Sequence *seq)

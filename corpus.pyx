@@ -21,9 +21,9 @@ posterminalsre = re.compile(r"\(([^ )]+) ([^ )]+)\)")
 
 
 cdef class Text(object):
-	""" Takes a file whose lines are sequences (e.g., sentences) of
+	"""Takes a file whose lines are sequences (e.g., sentences) of
 	space-delimeted tokens (e.g., words), and compiles it into an array with
-	tokens mapped to integers, according to the given mapping. """
+	tokens mapped to integers, according to the given mapping."""
 	def __init__(self, filename, mapping, bracket=False, pos=False,
 			strfragment=False):
 		cdef:
@@ -80,11 +80,17 @@ cdef class Comparator(object):
 		self.pos = pos
 		self.strfragment = strfragment
 
-	cdef Text readother(self, filename):
-		"""Load the second Text; if filename is None, compare to first text."""
+	cdef Text readother(self, filename, bint storetokens=False):
+		"""Load the second Text; if filename is None, compare to first text.
+
+		If storetokens is True, add the tokens of the new file to the mapping.
+		"""
 		if filename is None:
 			text2 = self.text1
 		else:
+			if storetokens:
+				extendmapping(self.mapping, self.revmapping, filename,
+						self.bracket, self.pos)
 			text2 = Text(filename, self.mapping, self.bracket, self.pos)
 		return text2
 
@@ -101,7 +107,7 @@ cdef class Comparator(object):
 
 
 def getmapping(filename, bracket=False, pos=False, strfragment=False):
-	""" Create a mapping of tokens to integers and back from a given file. """
+	"""Create a mapping of tokens to integers and back from a given file."""
 	# split file into tokens and turn into set
 	if bracket and pos:
 		tokens = set(["/".join(reversed(tagword)) for tagword
@@ -119,3 +125,19 @@ def getmapping(filename, bracket=False, pos=False, strfragment=False):
 	return mapping, revmapping
 
 
+def extendmapping(mapping, revmapping, filename,
+		bracket=False, pos=False, strfragment=False):
+	"""Extend an existing mapping of tokens to integers with tokens
+	from a given file."""
+	# split file into tokens and turn into set
+	if bracket and pos:
+		tokens = set(["/".join(reversed(tagword)) for tagword
+				in posterminalsre.findall(open(filename).read())])
+	elif bracket:
+		tokens = set(terminalsre.findall(open(filename).read()))
+	else:
+		tokens = set(open(filename).read().split())
+	x = len(revmapping)
+	newtokens = tokens - mapping.viewkeys()
+	revmapping.extend(newtokens)
+	mapping.update({a: n for n, a in enumerate(revmapping[x:], x)})
