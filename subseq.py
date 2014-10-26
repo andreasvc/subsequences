@@ -31,6 +31,7 @@ compared, except for pairs <n, n>.
     --parallel     read sentence aligned corpus and produce table of parallel
                    substrings and the sentence indices in which they occur.
     --limit x      read up to x sentences of each file.
+    --minmatches x only consider substrings with at least x tokens.
 """ % sys.argv[0]
 
 
@@ -38,7 +39,7 @@ def main():
 	"""Parse command line arguments, get subsequences, dump to stdout/file."""
 	# command line arguments
 	flags = ('debug', 'all', 'bracket', 'pos', 'strfragment', 'parallel')
-	options = ('batch=', 'limit=')
+	options = ('batch=', 'limit=', 'minmatches=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
 		opts = dict(opts)
@@ -59,16 +60,17 @@ def main():
 	filename1 = args[0]
 	if '--parallel' in opts:
 		comparator = ParallelComparator(filename1,
-				limit=int(opts.get('--limit')))
-		results = comparator.getsequences(args[1],
-				minmatchsize=2, debug='--debug' in opts)
-		comparator.dumptable(results, outfile)
+				limit=int(opts['--limit']) if '--limit' in opts else None)
+		table, srcstrs, targetstrs = comparator.getsequences(args[1],
+				minmatchsize=int(opts.get('--minmatches', 1)),
+				debug='--debug' in opts)
+		comparator.dumptable(table, srcstrs, targetstrs, outfile)
 		return
 
 	comparator = LCSComparator(filename1,
 			bracket='--bracket' in opts, pos='--pos' in opts,
 			strfragment='--strfragment' in opts,
-			limit=opts.get('--limit'))
+			limit=int(opts['--limit']) if '--limit' in opts else None)
 
 	# find subsequences
 	if len(args) == 1:

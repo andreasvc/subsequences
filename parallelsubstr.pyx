@@ -4,6 +4,7 @@ import sys
 import itertools
 
 # Cython imports
+cimport cython
 from libc.stdlib cimport malloc, free
 from libc.stdint cimport uint8_t
 from libc.string cimport memcmp
@@ -11,6 +12,7 @@ from corpus cimport Text, Token, Sequence, SeqIdx, Comparator
 include "constants.pxi"
 
 
+@cython.freelist(1000)
 cdef class SubString:
 	"""A contiguous substring of a Sequence."""
 	cdef Sequence *seq
@@ -73,9 +75,13 @@ cdef class ParallelComparator(Comparator):
 			Sequence *seq2s  # source = text1
 			Sequence *seq1t  # target = text2
 			Sequence *seq2t  # target = text2
-			size_t n, m
+			size_t n, m, s, t
+			dict srcstrs = {}
+			dict targetstrs = {}
+			list revsrcstrs = []
+			list revtargetstrs = []
 			set indexset
-			dict table = {}
+			list table = []
 		self.text2 = self.readother(filename, storetokens=True)
 		if self.text1.length != self.text2.length:
 			raise ValueError('Source and target files have different '
@@ -110,28 +116,42 @@ cdef class ParallelComparator(Comparator):
 
 				if sourcematches and targetmatches:
 					for sourcematch in sourcematches:
-						if sourcematch not in table:
-							table[sourcematch] = {}
+						if sourcematch in srcstrs:
+							s = srcstrs[sourcematch]
+						else:
+							s = len(srcstrs)
+							srcstrs[sourcematch] = len(srcstrs)
+							revsrcstrs.append(sourcematch)
+							table.append({})
 						for targetmatch in targetmatches:
-							if targetmatch not in table[sourcematch]:
-								table[sourcematch][targetmatch] = set()
-							indexset = table[sourcematch][targetmatch]
-							indexset.add(n)
-							indexset.add(m)
+							if targetmatch in targetstrs:
+								t = targetstrs[targetmatch]
+								if t in table[s]:
+									indexset = table[s][t]
+									indexset.add(n)
+									indexset.add(m)
+								else:
+									table[s][t] = {n, m}
+							else:
+								t = len(targetstrs)
+								targetstrs[targetmatch] = len(targetstrs)
+								revtargetstrs.append(targetmatch)
+								table[s][t] = {n, m}
 
 		# clean up
 		free(chart)
 		chart = NULL
-		return table
+		return table, revsrcstrs, revtargetstrs
 
 	cdef computematch(self, SeqIdx *chart,
 			Sequence *seq1, Sequence *seq2,
 			int minmatchsize, bint debug):
 		result = longest_common_substrings(chart, seq1, seq2, minmatchsize)
 		if debug:
+			print('\t' + ' '.join([str(m) for m in range(seq2.length)]))
 			print('\t' + ' '.join(self.seqtostr(seq2)))
 			for n in range(seq1.length):
-				print self.revmapping[seq1.tokens[n]] + '\t',
+				print '%d. %s\t' % (n, self.revmapping[seq1.tokens[n]]),
 				for m in range(seq2.length + 1):
 					print chart[n * (seq2.length + 1) + m],
 				print
@@ -150,15 +170,15 @@ cdef class ParallelComparator(Comparator):
 			print(substring)
 			raise
 
-	def dumptable(self, results, out):
+	def dumptable(self, table, srcstrs, targetstrs, out):
 		for length, srcmatches in itertools.groupby(
-				sorted(results, key=len), key=len):
+				sorted(table, key=len), key=len):
 			out.write('%d:\n' % length)
-			for srcmatch in srcmatches:
-				out.write('\t%s\n' % self.subtostr(srcmatch))
-				for targetmatch, idx in results[srcmatch].iteritems():
+			for srcmatch, target in enumerate(srcmatches):
+				out.write('\t%s\n' % self.subtostr(srcstrs[srcmatch]))
+				for targetmatch, idx in target.iteritems():
 					out.write('\t\t%s\t{%s}\n' % (
-							self.subtostr(targetmatch),
+							self.subtostr(targetstrs[targetmatch]),
 							','.join([str(a) for a in idx])))
 
 
@@ -181,7 +201,7 @@ cdef set longest_common_substrings(SeqIdx *chart,
 		chart[n * cols + 0] = chart[n * cols + seq2.length] = (
 				seq1.tokens[n] == seq2.tokens[0])
 		for m in range(1, seq2.length):
-			if seq1.tokens[n - 1] == seq2.tokens[m - 1]:
+			if seq1.tokens[n] == seq2.tokens[m]:
 				chart[n * cols + m] = chart[
 						(n - 1) * cols + (m - 1)] + 1
 				if (chart[n * cols + m] >
@@ -189,10 +209,11 @@ cdef set longest_common_substrings(SeqIdx *chart,
 					chart[n * cols + seq2.length] = chart[
 							n * cols + m]
 			else:
-				chart[n * cols + m] = seq1.tokens[n] == seq2.tokens[m]
+				chart[n * cols + m] = 0
 
 	return {new_SubString(seq1, n - chart[n * cols + seq2.length] + 1, n + 1)
 			for n in range(seq1.length)
 			if minmatchsize <= chart[n * cols + seq2.length] <= n + 1
 			and (n == seq1.length - 1
-				or chart[(n + 1) * cols + seq2.length] == 0)}
+				or chart[(n + 1) * cols + seq2.length]
+				!= chart[n * cols + seq2.length] + 1)}
