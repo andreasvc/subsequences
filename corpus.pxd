@@ -26,4 +26,4 @@ cdef class Comparator(object):
 	cdef list revmapping
 	cdef bint bracket, pos, strfragment
 	cdef Text readother(self, filename, bint storetokens=*)
-	cdef tuple getresult(self, Sequence *seq)
+	cdef tuple seqtostr(self, Sequence *seq)

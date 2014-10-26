@@ -54,8 +54,8 @@ cdef class SubString:
 
 	def __repr__(self):
 		cdef int n
-		return '%s(<%r>)' % (
-				self.__class__.__name__,
+		return '%s(<%d:%d==%r>)' % (
+				self.__class__.__name__, self.start, self.end,
 				[self.seq.tokens[n] for n in range(self.start, self.end)])
 
 
@@ -70,11 +70,10 @@ cdef inline SubString new_SubString(Sequence *seq, SeqIdx start, SeqIdx end):
 cdef class ParallelComparator(Comparator):
 	"""Load a file after which its parallel substrings with respect
 	to other files can be extracted."""
+	cdef Text text2
 	def getsequences(self, filename, int minmatchsize=1, bint debug=False):
-		"""Get the longest common subsequences in two sentence aligned files.
-		"""
+		"""Get common substrings for two sentence aligned files."""
 		cdef:
-			Text text2
 			SeqIdx *chart
 			Sequence *seq1s  # source = text1
 			Sequence *seq2s  # source = text1
@@ -83,39 +82,41 @@ cdef class ParallelComparator(Comparator):
 			size_t n, m
 			set indexset
 			dict results = {}
-		text2 = self.readother(filename, storetokens=True)
-		if self.text1.length != text2.length:
+		self.text2 = self.readother(filename, storetokens=True)
+		if self.text1.length != self.text2.length:
 			raise ValueError('Source and target files have different '
 					'number of lines')
 
 		# allocate temporary datastructures
 		chart = <SeqIdx *>malloc(
-				max(self.text1.maxlen,  text2.maxlen) ** 2 * sizeof(SeqIdx))
+				((max(self.text1.maxlen,  self.text2.maxlen) + 1) ** 2)
+				* sizeof(SeqIdx))
 		if chart is NULL:
 			raise MemoryError
 
 		for n in range(self.text1.length):
 			seq1s = &(self.text1.seqs[n])
-			seq1t = &(text2.seqs[n])
+			seq1t = &(self.text2.seqs[n])
 			for m in range(n + 1, self.text1.length):
 				seq2s = &(self.text1.seqs[m])
-				seq2t = &(text2.seqs[m])
+				seq2t = &(self.text2.seqs[m])
 
-				sourcematches, targetmatches = self.computematch(
-						chart, seq1s, seq1t, seq2s, seq2t)
+				result1 = self.computematch(
+						chart, seq1s, seq2s, minmatchsize, debug)
+				result2 = self.computematch(
+						chart, seq1t, seq2t, minmatchsize, debug)
+				# remove exact matches between source & target
+				sourcematches = result1 - result2
+				targetmatches = result2 - result1
 				if debug:
 					print('sourcematches', sourcematches)
 					print('targetmatches', targetmatches)
 
 				if sourcematches and targetmatches:
 					for sourcematch in sourcematches:
-						if len(sourcematch) < minmatchsize:
-							continue
+						if sourcematch not in results:
+							results[sourcematch] = {}
 						for targetmatch in targetmatches:
-							if len(targetmatch) < minmatchsize:
-								continue
-							if sourcematch not in results:
-								results[sourcematch] = {}
 							if targetmatch not in results[sourcematch]:
 								results[sourcematch][targetmatch] = set()
 							indexset = results[sourcematch][targetmatch]
@@ -128,20 +129,18 @@ cdef class ParallelComparator(Comparator):
 		return results
 
 	cdef computematch(self, SeqIdx *chart,
-			Sequence *seq1s, Sequence *seq1t,
-			Sequence *seq2s, Sequence *seq2t):
-
-
-		result1 = {longest_common_substring(chart, seq1s, seq2s)}
-		# result1 = backtrackall(chart, seq1s, seq2s,
-		# 			seq1s.length - 1, seq2s.length - 1, self.revmapping)
-
-		result2 = {longest_common_substring(chart, seq1t, seq2t)}
-		#result2 = backtrackall(chart, seq1t, seq2t,
-		#			seq1t.length - 1, seq2t.length - 1, self.revmapping)
-
-		# remove exact matches
-		return (result1 - result2 - {None}), (result2 - result1 - {None})
+			Sequence *seq1, Sequence *seq2,
+			int minmatchsize, bint debug):
+		result = longest_common_substrings(chart, seq1, seq2, minmatchsize)
+		if debug:
+			print('\t' + ' '.join(self.seqtostr(seq2)))
+			for n in range(seq1.length):
+				print self.revmapping[seq1.tokens[n]] + '\t',
+				for m in range(seq2.length + 1):
+					print chart[n * (seq2.length + 1) + m],
+				print
+			print
+		return result
 
 	cdef str subtostr(self, SubString substring):
 		"""Turn the array representation of a substring into a space separated
@@ -162,53 +161,42 @@ cdef class ParallelComparator(Comparator):
 			for srcmatch in srcmatches:
 				out.write('\t%s\n' % self.subtostr(srcmatch))
 				for targetmatch, idx in results[srcmatch].iteritems():
-					out.write('\t\t%s\t%s\n' % (
-							self.subtostr(targetmatch), idx))
+					out.write('\t\t%s\t{%s}\n' % (
+							self.subtostr(targetmatch),
+							','.join([str(a) for a in idx])))
 
 
-cdef SubString longest_common_substring(SeqIdx *chart,
-		Sequence *seq1, Sequence *seq2):
-	cdef SeqIdx longest = 0, x_longest = 0
-	cdef int n, m
+cdef set longest_common_substrings(SeqIdx *chart,
+		Sequence *seq1, Sequence *seq2, int minmatchsize):
+	"""Return a set of ``SubString`` objects with the longest common substring
+	at each position of ``seq1``."""
+	cdef int n, m, cols = seq2.length + 1
+
+	# NB: ``chart[n * cols + m]`` means ``chart[n][m]``
+	# last column stores longest match for each n
+	chart[0 * cols + seq2.length] = 0
 	for m in range(seq2.length):
-		chart[0 * seq2.length + m] = seq1.tokens[0] == seq2.tokens[m]
+		if seq1.tokens[0] == seq2.tokens[m]:
+			chart[0 * cols + m] = chart[0 * cols + seq2.length] = 1
+		else:
+			chart[0 * cols + m] = 0
+
 	for n in range(1, seq1.length):
-		chart[n * seq2.length + 0] = seq1.tokens[n] == seq2.tokens[0]
+		chart[n * cols + 0] = chart[n * cols + seq2.length] = (
+				seq1.tokens[n] == seq2.tokens[0])
 		for m in range(1, seq2.length):
 			if seq1.tokens[n - 1] == seq2.tokens[m - 1]:
-				chart[n * seq2.length + m] = chart[
-						(n - 1) * seq2.length + (m - 1)] + 1
-				if chart[n * seq2.length + m] > longest:
-					longest = chart[n * seq2.length + m]
-					x_longest = n
+				chart[n * cols + m] = chart[
+						(n - 1) * cols + (m - 1)] + 1
+				if (chart[n * cols + m] >
+						chart[n * cols + seq2.length]):
+					chart[n * cols + seq2.length] = chart[
+							n * cols + m]
 			else:
-				chart[n * seq2.length + m] = 0
+				chart[n * cols + m] = seq1.tokens[n] == seq2.tokens[m]
 
-	if longest == 0:
-		return None
-	elif longest > x_longest:
-		raise ValueError
-	return new_SubString(seq1, x_longest - longest, x_longest)
-
-
-# cdef set backtrackall(SeqIdx *chart, Sequence *seq1, Sequence *seq2,
-# 		int n, int m, list revmapping):
-# 	"""Extract set of tuples with all LCSes from chart and two sequences.
-# 
-# 	This has exponentional worst case complexity since there can be
-# 	exponentionally many longest common subsequences."""
-# 	if n == -1 or m == -1:
-# 		return {()}  # set with the empty tuple
-# 	elif seq1.tokens[n] == seq2.tokens[m]:
-# 		return set([seq + (revmapping[seq1.tokens[n]], )
-# 			for seq in backtrackall(
-# 				chart, seq1, seq2, n - 1, m - 1, revmapping)])
-# 	elif (chart[n * seq2.length + (m - 1)]
-# 			>= chart[(n - 1) * seq2.length + m]):
-# 		result = backtrackall(chart, seq1, seq2, n, m - 1, revmapping)
-# 	else:
-# 		result = set()
-# 	if (chart[(n - 1) * seq2.length + m]
-# 			>= chart[n * seq2.length + (m - 1)]):
-# 		result.update(backtrackall(chart, seq1, seq2, n - 1, m, revmapping))
-# 	return result
+	return {new_SubString(seq1, n - chart[n * cols + seq2.length] + 1, n + 1)
+			for n in range(seq1.length)
+			if minmatchsize <= chart[n * cols + seq2.length] <= n + 1
+			and (n == seq1.length - 1
+				or chart[(n + 1) * cols + seq2.length] == 0)}

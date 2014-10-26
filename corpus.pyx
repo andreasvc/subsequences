@@ -94,16 +94,12 @@ cdef class Comparator(object):
 			text2 = Text(filename, self.mapping, self.bracket, self.pos)
 		return text2
 
-	cdef tuple getresult(self, Sequence *seq):
+	cdef tuple seqtostr(self, Sequence *seq):
 		"""Turn the array representation of a sentence back into a sequence of
 		string tokens."""
-		cdef:
-			int n
-			list result
-		# map tokens to strings; reverse the result
-		result = [self.revmapping[seq.tokens[n]]
-				for n in range(seq.length - 1, -1, -1)]
-		return tuple(result)
+		cdef int n
+		return tuple([self.revmapping[seq.tokens[n]]
+				for n in range(seq.length)])
 
 
 def getmapping(filename, bracket=False, pos=False, strfragment=False):
