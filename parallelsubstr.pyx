@@ -1,5 +1,6 @@
 """Extract common substrings from sentence aligned corpora."""
 
+import sys
 import itertools
 
 # Cython imports
@@ -74,11 +75,12 @@ cdef class ParallelComparator(Comparator):
 			Sequence *seq2t  # target = text2
 			size_t n, m
 			set indexset
-			dict results = {}
+			dict table = {}
 		self.text2 = self.readother(filename, storetokens=True)
 		if self.text1.length != self.text2.length:
 			raise ValueError('Source and target files have different '
-					'number of lines')
+					'number of lines: %d vs %d' % (
+					self.text1.length, self.text2.length))
 
 		# allocate temporary datastructures
 		chart = <SeqIdx *>malloc(
@@ -90,6 +92,7 @@ cdef class ParallelComparator(Comparator):
 		for n in range(self.text1.length):
 			seq1s = &(self.text1.seqs[n])
 			seq1t = &(self.text2.seqs[n])
+			print >>sys.stderr, '%d. %s' % (n, ' '.join(self.seqtostr(seq1s)))
 			for m in range(n + 1, self.text1.length):
 				seq2s = &(self.text1.seqs[m])
 				seq2t = &(self.text2.seqs[m])
@@ -107,19 +110,19 @@ cdef class ParallelComparator(Comparator):
 
 				if sourcematches and targetmatches:
 					for sourcematch in sourcematches:
-						if sourcematch not in results:
-							results[sourcematch] = {}
+						if sourcematch not in table:
+							table[sourcematch] = {}
 						for targetmatch in targetmatches:
-							if targetmatch not in results[sourcematch]:
-								results[sourcematch][targetmatch] = set()
-							indexset = results[sourcematch][targetmatch]
+							if targetmatch not in table[sourcematch]:
+								table[sourcematch][targetmatch] = set()
+							indexset = table[sourcematch][targetmatch]
 							indexset.add(n)
 							indexset.add(m)
 
 		# clean up
 		free(chart)
 		chart = NULL
-		return results
+		return table
 
 	cdef computematch(self, SeqIdx *chart,
 			Sequence *seq1, Sequence *seq2,

@@ -30,6 +30,7 @@ compared, except for pairs <n, n>.
                    consist of 3 or more tokens, begin with at least 2 tokens.
     --parallel     read sentence aligned corpus and produce table of parallel
                    substrings and the sentence indices in which they occur.
+    --limit x      read up to x sentences of each file.
 """ % sys.argv[0]
 
 
@@ -37,7 +38,7 @@ def main():
 	"""Parse command line arguments, get subsequences, dump to stdout/file."""
 	# command line arguments
 	flags = ('debug', 'all', 'bracket', 'pos', 'strfragment', 'parallel')
-	options = ('batch=', )
+	options = ('batch=', 'limit=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
 		opts = dict(opts)
@@ -57,7 +58,8 @@ def main():
 	# read first text
 	filename1 = args[0]
 	if '--parallel' in opts:
-		comparator = ParallelComparator(filename1)
+		comparator = ParallelComparator(filename1,
+				limit=int(opts.get('--limit')))
 		results = comparator.getsequences(args[1],
 				minmatchsize=2, debug='--debug' in opts)
 		comparator.dumptable(results, outfile)
@@ -65,7 +67,8 @@ def main():
 
 	comparator = LCSComparator(filename1,
 			bracket='--bracket' in opts, pos='--pos' in opts,
-			strfragment='--strfragment' in opts)
+			strfragment='--strfragment' in opts,
+			limit=opts.get('--limit'))
 
 	# find subsequences
 	if len(args) == 1:

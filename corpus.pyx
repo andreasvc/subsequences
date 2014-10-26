@@ -13,6 +13,7 @@ Approach:
 """
 
 import re
+import itertools
 
 # a terminal in a tree in bracket notation is anything between
 # a space and a closing paren; use group to extract only the terminal.
@@ -25,20 +26,23 @@ cdef class Text(object):
 	space-delimeted tokens (e.g., words), and compiles it into an array with
 	tokens mapped to integers, according to the given mapping."""
 	def __init__(self, filename, mapping, bracket=False, pos=False,
-			strfragment=False):
+			strfragment=False, limit=None):
 		cdef:
 			Token maxidx = max(mapping.values()) + 1
 			size_t n, m, idx = 0
 			list text
 
 		if bracket and pos:
-			text = [["/".join(reversed(tagword))
+			text = [['/'.join(reversed(tagword))
 					for tagword in posterminalsre.findall(line)]
-					for line in open(filename)]
+					for line in itertools.islice(open(filename), None, limit)]
 		elif bracket:
-			text = [terminalsre.findall(line) for line in open(filename)]
+			text = [terminalsre.findall(line)
+					for line in itertools.islice(open(filename), None, limit)]
 		else:
-			text = [line.strip().split() for line in open(filename)]
+			text = [line.strip().split()
+					for line in itertools.islice(open(filename), None, limit)]
+
 		if strfragment:
 			text = [['#START#'] + sent + ['#STOP#'] for sent in text]
 
@@ -60,7 +64,7 @@ cdef class Text(object):
 			idx += len(sent)
 
 	def __dealloc__(self):
-		""" Free memory. """
+		"""Free memory."""
 		if self.tokens is not NULL:
 			free(self.tokens)
 			self.tokens = NULL
@@ -72,26 +76,30 @@ cdef class Text(object):
 cdef class Comparator(object):
 	"""A base class for comparing two Texts to each other."""
 	def __init__(self, filename, bracket=False, pos=False,
-			strfragment=False):
+			strfragment=False, limit=None):
 		self.mapping, self.revmapping = getmapping(filename, bracket, pos,
 				strfragment)
-		self.text1 = Text(filename, self.mapping, bracket, pos, strfragment)
+		self.text1 = Text(filename, self.mapping, bracket, pos, strfragment,
+				limit)
 		self.bracket = bracket
 		self.pos = pos
 		self.strfragment = strfragment
+		self.limit = limit
 
 	cdef Text readother(self, filename, bint storetokens=False):
 		"""Load the second Text; if filename is None, compare to first text.
 
 		If storetokens is True, add the tokens of the new file to the mapping.
 		"""
+		cdef Text text2
 		if filename is None:
 			text2 = self.text1
 		else:
 			if storetokens:
 				extendmapping(self.mapping, self.revmapping, filename,
 						self.bracket, self.pos)
-			text2 = Text(filename, self.mapping, self.bracket, self.pos)
+			text2 = Text(filename, self.mapping, self.bracket, self.pos,
+					self.strfragment, self.limit)
 		return text2
 
 	cdef tuple seqtostr(self, Sequence *seq):
@@ -106,7 +114,7 @@ def getmapping(filename, bracket=False, pos=False, strfragment=False):
 	"""Create a mapping of tokens to integers and back from a given file."""
 	# split file into tokens and turn into set
 	if bracket and pos:
-		tokens = set(["/".join(reversed(tagword)) for tagword
+		tokens = set(['/'.join(reversed(tagword)) for tagword
 				in posterminalsre.findall(open(filename).read())])
 	elif bracket:
 		tokens = set(terminalsre.findall(open(filename).read()))
@@ -127,7 +135,7 @@ def extendmapping(mapping, revmapping, filename,
 	from a given file."""
 	# split file into tokens and turn into set
 	if bracket and pos:
-		tokens = set(["/".join(reversed(tagword)) for tagword
+		tokens = set(['/'.join(reversed(tagword)) for tagword
 				in posterminalsre.findall(open(filename).read())])
 	elif bracket:
 		tokens = set(terminalsre.findall(open(filename).read()))
