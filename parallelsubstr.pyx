@@ -18,27 +18,20 @@ cdef class SubString:
 	def __richcmp__(self, other, int op):
 		cdef int cmp = 0
 		cdef SubString me, ob
-		if not isinstance(self, SubString) or not isinstance(other, SubString):
+		if (not isinstance(self, SubString) or not isinstance(other, SubString)
+				or op < 2 or op > 3):  # no <, >, etc.
 			return NotImplemented
 
 		me = self
 		ob = other
-		if me.seq is ob.seq:
-			if op == 2:
-				return me.start == ob.start and me.end == ob.end
-			elif op == 3:
-				return me.start != ob.start or me.end != ob.end
+		if me.seq is ob.seq and me.start == ob.start and me.end == ob.end:
+			return op == 2
 		elif (me.end - me.start) == (ob.end - ob.start):
 			cmp = memcmp(
 					<char *>&(me.seq[me.start]),
 					<char *>&(ob.seq[ob.start]),
-					me.end - me.start)
-			if op == 2:
-				return cmp == 0
-			elif op == 3:
-				return cmp != 0
-
-		return NotImplemented  # no <, >, etc.
+					(me.end - me.start) * sizeof(Token))
+			return (op == 2) == (cmp == 0)
 
 	def __hash__(self):
 		cdef long n, _hash = -1
