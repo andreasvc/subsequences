@@ -1,12 +1,11 @@
-subsequences
-============
+# subsequences
 
 - Extract longest common subsequences from texts, along with frequencies.
 - Extract common substrings from parallel texts, produce table of indices.
 
 
-Requirements:
--------------
+## Requirements:
+
 - Python 2.7+  http://www.python.org (need headers, e.g. python-dev package)
 - Cython       http://www.cython.org
 
@@ -20,8 +19,7 @@ issue the following commands:
     make
 
 
-Usage:
-------
+## Usage:
 
 	usage: subseq.py text1 [text2 [text3 ... textn --batch dir]] [OPTIONS]
 
@@ -54,10 +52,9 @@ Usage:
 					   to match only unicode alphanumeric characters and dash.
 
 
-Examples:
----------
-LCS:
-~~~~
+## Examples:
+
+### LCS:
 
     ~/subsequences $ head text*
     ==> text1 <==
@@ -69,8 +66,9 @@ LCS:
     ~/subsequences $ python subseq.py text1 text2
     Hammerfest  a  though why  would  to  there     1
 
-Parallel substrings:
-~~~~~~~~~~~~~~~~~~~~
+
+### Parallel substrings:
+
 	~/subsequences $ head s t
 	==> s <==
 	I feel we will have to call it a day at this point .
