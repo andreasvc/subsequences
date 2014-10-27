@@ -24,7 +24,7 @@ cdef class Comparator(object):
 	cdef Text text1
 	cdef dict mapping
 	cdef list revmapping
-	cdef bint bracket, pos, strfragment
-	cdef object limit
+	cdef bint bracket, pos, strfragment, lower
+	cdef object limit, filterre, encoding
 	cdef Text readother(self, filename, bint storetokens=*)
-	cdef tuple seqtostr(self, Sequence *seq)
+	cdef seqtostr(self, Sequence *seq)

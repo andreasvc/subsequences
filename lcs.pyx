@@ -71,7 +71,7 @@ cdef class LCSComparator(Comparator):
 					# increase count for the subsequence that was found
 					if (result.length and (not self.strfragment
 							or self.makestrfragment(&result))):
-						results[self.seqtostr(&result)[::-1]] += 1
+						results[tuple(self.seqtostr(&result)[::-1])] += 1
 		# clean up
 		free(result.tokens)
 		free(chart)

@@ -12,39 +12,49 @@ Approach:
    => fast comparisons, low memory usage.
 """
 
+import io
 import re
 import itertools
 
 # a terminal in a tree in bracket notation is anything between
 # a space and a closing paren; use group to extract only the terminal.
-terminalsre = re.compile(r" ([^ )]+)\)")
-posterminalsre = re.compile(r"\(([^ )]+) ([^ )]+)\)")
+terminalsre = re.compile(ur" ([^ )]+)\)")
+posterminalsre = re.compile(ur"\(([^ )]+) ([^ )]+)\)")
 
 
 cdef class Text(object):
 	"""Takes a file whose lines are sequences (e.g., sentences) of
 	space-delimeted tokens (e.g., words), and compiles it into an array with
 	tokens mapped to integers, according to the given mapping."""
-	def __init__(self, filename, mapping, bracket=False, pos=False,
-			strfragment=False, limit=None):
+	def __init__(self, filename, mapping, encoding='utf8',
+			bracket=False, pos=False, strfragment=False, limit=None,
+			bint lower=False, bint filtered=False):
 		cdef:
 			Token maxidx = max(mapping.values()) + 1
 			size_t n, m, idx = 0
 			list text
 
+		lines = itertools.islice(
+				io.open(filename, encoding=encoding),
+				None, limit)
+
 		if bracket and pos:
 			text = [['/'.join(reversed(tagword))
-					for tagword in posterminalsre.findall(line)]
-					for line in itertools.islice(open(filename), None, limit)]
+					for tagword in posterminalsre.findall(line.lower()
+						if lower else line)]
+					for line in lines]
 		elif bracket:
-			text = [terminalsre.findall(line)
-					for line in itertools.islice(open(filename), None, limit)]
+			text = [terminalsre.findall(line.lower() if lower else line)
+					for line in lines]
 		else:
-			text = [line.strip().split()
-					for line in itertools.islice(open(filename), None, limit)]
+			text = [line.strip().lower().split() if lower
+					else line.strip().split()
+					for line in lines]
 
 		if strfragment:
 			text = [['#START#'] + sent + ['#STOP#'] for sent in text]
+		if filtered:
+			text = [[a for a in sent if a in mapping] for sent in text]
 
 		self.length = len(text)
 		self.maxlen = max(map(len, text))
@@ -75,16 +85,19 @@ cdef class Text(object):
 
 cdef class Comparator(object):
 	"""A base class for comparing two Texts to each other."""
-	def __init__(self, filename, bracket=False, pos=False,
-			strfragment=False, limit=None):
-		self.mapping, self.revmapping = getmapping(filename, bracket, pos,
-				strfragment)
-		self.text1 = Text(filename, self.mapping, bracket, pos, strfragment,
-				limit)
+	def __init__(self, filename, encoding='utf8', bracket=False, pos=False,
+			strfragment=False, limit=None, lower=False, filterre=None):
+		self.encoding = encoding
 		self.bracket = bracket
 		self.pos = pos
 		self.strfragment = strfragment
 		self.limit = limit
+		self.lower = lower
+		self.filterre = None if filterre is None else re.compile(filterre)
+		self.mapping, self.revmapping = getmapping(filename, encoding,
+				bracket, pos, strfragment, lower, self.filterre)
+		self.text1 = Text(filename, self.mapping, encoding, bracket, pos,
+				strfragment, limit, lower, filterre is not None)
 
 	cdef Text readother(self, filename, bint storetokens=False):
 		"""Load the second Text; if filename is None, compare to first text.
@@ -97,29 +110,36 @@ cdef class Comparator(object):
 		else:
 			if storetokens:
 				extendmapping(self.mapping, self.revmapping, filename,
-						self.bracket, self.pos)
-			text2 = Text(filename, self.mapping, self.bracket, self.pos,
-					self.strfragment, self.limit)
+						self.encoding, self.bracket, self.pos,
+						self.strfragment, self.lower, self.filterre)
+			text2 = Text(filename, self.mapping, self.encoding, self.bracket,
+					self.pos, self.strfragment, self.limit, self.lower,
+					self.filterre is not None)
 		return text2
 
-	cdef tuple seqtostr(self, Sequence *seq):
+	cdef seqtostr(self, Sequence *seq):
 		"""Turn the array representation of a sentence back into a sequence of
 		string tokens."""
 		cdef int n
-		return tuple([self.revmapping[seq.tokens[n]]
-				for n in range(seq.length)])
+		return [self.revmapping[seq.tokens[n]] for n in range(seq.length)]
 
 
-def getmapping(filename, bracket=False, pos=False, strfragment=False):
+def getmapping(filename, encoding='utf8', bracket=False, pos=False,
+		strfragment=False, lower=False, filterre=None):
 	"""Create a mapping of tokens to integers and back from a given file."""
 	# split file into tokens and turn into set
+	data = io.open(filename, encoding=encoding).read()
+	if lower:
+		data = data.lower()
 	if bracket and pos:
 		tokens = set(['/'.join(reversed(tagword)) for tagword
-				in posterminalsre.findall(open(filename).read())])
+				in posterminalsre.findall(data)])
 	elif bracket:
-		tokens = set(terminalsre.findall(open(filename).read()))
+		tokens = set(terminalsre.findall(data))
 	else:
-		tokens = set(open(filename).read().split())
+		tokens = set(data.split())
+	if filterre is not None:
+		tokens = {a for a in tokens if filterre.match(a) is not None}
 	# the empty string '' is used as sentinel token (indicates a gap)
 	revmapping = ['']
 	if strfragment:
@@ -129,18 +149,24 @@ def getmapping(filename, bracket=False, pos=False, strfragment=False):
 	return mapping, revmapping
 
 
-def extendmapping(mapping, revmapping, filename,
-		bracket=False, pos=False, strfragment=False):
+def extendmapping(mapping, revmapping, filename, encoding='utf8',
+		bracket=False, pos=False, strfragment=False, lower=False,
+		filterre=None):
 	"""Extend an existing mapping of tokens to integers with tokens
 	from a given file."""
 	# split file into tokens and turn into set
+	data = io.open(filename, encoding=encoding).read()
+	if lower:
+		data = data.lower()
 	if bracket and pos:
 		tokens = set(['/'.join(reversed(tagword)) for tagword
-				in posterminalsre.findall(open(filename).read())])
+				in posterminalsre.findall(data)])
 	elif bracket:
-		tokens = set(terminalsre.findall(open(filename).read()))
+		tokens = set(terminalsre.findall(data))
 	else:
-		tokens = set(open(filename).read().split())
+		tokens = set(data.split())
+	if filterre is not None:
+		tokens = {a for a in tokens if filterre.match(a) is not None}
 	x = len(revmapping)
 	newtokens = tokens - mapping.viewkeys()
 	revmapping.extend(newtokens)

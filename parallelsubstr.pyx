@@ -80,7 +80,7 @@ cdef class ParallelComparator(Comparator):
 			dict targetstrs = {}
 			list revsrcstrs = []
 			list revtargetstrs = []
-			set indexset
+			set indexset, sourcematches, targetmatches
 			list table = []
 		self.text2 = self.readother(filename, storetokens=True)
 		if self.text1.length != self.text2.length:
@@ -103,13 +103,13 @@ cdef class ParallelComparator(Comparator):
 				seq2s = &(self.text1.seqs[m])
 				seq2t = &(self.text2.seqs[m])
 
-				result1 = self.computematch(
+				sourcematches = self.computematch(
 						chart, seq1s, seq2s, minmatchsize, debug)
-				result2 = self.computematch(
+				targetmatches = self.computematch(
 						chart, seq1t, seq2t, minmatchsize, debug)
 				# remove exact matches between source & target
-				sourcematches = result1 - result2
-				targetmatches = result2 - result1
+				sourcematches -= targetmatches
+				targetmatches -= sourcematches
 				if debug:
 					print('sourcematches', sourcematches)
 					print('targetmatches', targetmatches)
@@ -158,17 +158,13 @@ cdef class ParallelComparator(Comparator):
 			print
 		return result
 
-	cdef str subtostr(self, SubString substring):
+	cdef subtostr(self, SubString substring):
 		"""Turn the array representation of a substring into a space separated
 		string tokens."""
 		cdef int n
-		try:
-			return ' '.join([
-					self.revmapping[substring.seq.tokens[n]]
-					for n in range(substring.start, substring.end)])
-		except IndexError:
-			print(substring)
-			raise
+		return ' '.join([
+				self.revmapping[substring.seq.tokens[n]]
+				for n in range(substring.start, substring.end)])
 
 	def dumptable(self, table, srcstrs, targetstrs, out):
 		for length, srcmatches in itertools.groupby(

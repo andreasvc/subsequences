@@ -7,7 +7,7 @@ from lcs import LCSComparator
 from parallelsubstr import ParallelComparator
 
 USAGE = """
-usage: %s text1 [text2 [text3 ... textn --batch dir]] [--all] [--debug]
+usage: %s text1 [text2 [text3 ... textn --batch dir]] [OPTIONS]
 
 text1 and text2 are filenames, each file containing
 one sentence per line, words space separated.
@@ -23,6 +23,7 @@ compared, except for pairs <n, n>.
     --debug        dump charts with lengths of common subsequences.
     --batch dir    compare text1 to an arbitrary number of other given texts,
                    and write the results to dir/A_B for file A compared to B.
+    --enc x        specify encoding of input texts [default: utf-8].
     --bracket      input is in the form of bracketed trees:
                    (S (DT one) (RB per) (NN line))
     --pos          when --bracket is enabled, include POS tags with tokens.
@@ -32,14 +33,19 @@ compared, except for pairs <n, n>.
                    substrings and the sentence indices in which they occur.
     --limit x      read up to x sentences of each file.
     --minmatches x only consider substrings with at least x tokens.
+    --lower        convert texts to lower case
+    --filter x     only consider tokens matching regex x; e.g.: '(?u)[-\\w]+$'
+                   to match only unicode alphanumeric characters and dash.
+
 """ % sys.argv[0]
 
 
 def main():
 	"""Parse command line arguments, get subsequences, dump to stdout/file."""
 	# command line arguments
-	flags = ('debug', 'all', 'bracket', 'pos', 'strfragment', 'parallel')
-	options = ('batch=', 'limit=', 'minmatches=')
+	flags = ('debug', 'all', 'bracket', 'pos', 'strfragment', 'parallel',
+			'lower')
+	options = ('batch=', 'limit=', 'minmatches=', 'filter=', 'enc=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
 		opts = dict(opts)
@@ -58,9 +64,16 @@ def main():
 
 	# read first text
 	filename1 = args[0]
+	limit = int(opts['--limit']) if '--limit' in opts else None
+	filterre = unicode(opts['--filter']) if '--filter' in opts else None
 	if '--parallel' in opts:
 		comparator = ParallelComparator(filename1,
-				limit=int(opts['--limit']) if '--limit' in opts else None)
+				encoding=opts.get('--enc', 'utf8'),
+				bracket='--bracket' in opts,
+				pos='--pos' in opts,
+				strfragment='--strfragment' in opts,
+				lower='--lower' in opts,
+				limit=limit, filterre=filterre)
 		table, srcstrs, targetstrs = comparator.getsequences(args[1],
 				minmatchsize=int(opts.get('--minmatches', 1)),
 				debug='--debug' in opts)
@@ -68,9 +81,12 @@ def main():
 		return
 
 	comparator = LCSComparator(filename1,
-			bracket='--bracket' in opts, pos='--pos' in opts,
+			encoding=opts.get('--enc', 'utf8'),
+			bracket='--bracket' in opts,
+			pos='--pos' in opts,
 			strfragment='--strfragment' in opts,
-			limit=int(opts['--limit']) if '--limit' in opts else None)
+			lower='--lower' in opts,
+			limit=limit, filterre=filterre)
 
 	# find subsequences
 	if len(args) == 1:
