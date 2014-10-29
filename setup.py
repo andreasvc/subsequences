@@ -1,20 +1,19 @@
 """ Generic setup.py for Cython code. """
 from distutils.core import setup
+from distutils.extension import Extension
 from Cython.Build import cythonize
 from Cython.Distutils import build_ext
 from Cython.Compiler import Options
 
 Options.fast_fail = True
-Options.extra_compile_args = ['-O3']
-Options.extra_link_args = ['-O3'] #['-g']
 
 # for debugging, set wraparound and boundscheck to True
 DIRECTIVES = {
                 'profile': False,
                 'cdivision': True,
                 'nonecheck': False,
-                'wraparound': True,
-                'boundscheck': True,
+                'wraparound': False,
+                'boundscheck': False,
                 'embedsignature': True,
                 'warn.unused': True,
                 'warn.unreachable': True,
@@ -49,9 +48,14 @@ METADATA = dict(
 )
 
 if __name__ == '__main__':
+	extensions = Extension(
+			"*", ["*.pyx"],
+			extra_compile_args=['-O3', '-fopenmp'],
+			extra_link_args=['-fopenmp'])
 	setup(
 			cmdclass=dict(build_ext=build_ext),
-			ext_modules=cythonize('*.pyx',
+			ext_modules=cythonize(
+				extensions,
 				# nthreads=4,
 				annotate=True,
 				compiler_directives=DIRECTIVES,

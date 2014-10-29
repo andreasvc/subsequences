@@ -9,6 +9,7 @@ cimport cython
 from libc.stdlib cimport malloc, realloc, free
 from libc.stdint cimport uint8_t, uint32_t
 from libc.string cimport memcmp
+from cython.parallel cimport parallel, prange
 from corpus cimport Text, Token, Sequence, SeqIdx, Comparator
 include "constants.pxi"
 
@@ -131,14 +132,14 @@ cdef class ParallelComparator(Comparator):
 					if matches1[x].start == matches1[x].end:
 						continue
 					sourcematch = new_SubString(
-							&(self.text1.seqs[matches1[x].n]),
+							&(self.text1.seqs[n]),
 							matches1[x].start, matches1[x].end)
 					# Add the longest parallel substrings in same target sent.
 					for y in range(m * seq1t.length, (m + 1) * seq1t.length):
 						if matches2[y].start == matches2[y].end:
 							continue
 						targetmatch = new_SubString(
-								&(self.text2.seqs[matches2[y].n]),
+								&(self.text2.seqs[n]),
 								matches2[y].start, matches2[y].end)
 						if sourcematch == targetmatch:
 							break  # FIXME: prune this string globally?
@@ -148,11 +149,10 @@ cdef class ParallelComparator(Comparator):
 							table[sourcematch] = {}
 						if targetmatch in table[sourcematch]:
 							indexset = table[sourcematch][targetmatch]
-							indexset.add(matches1[x].n)
+							indexset.add(n)
 							indexset.add(matches2[y].m)
 						else:
-							table[sourcematch][targetmatch] = {
-									matches1[x].n, matches2[y].m}
+							table[sourcematch][targetmatch] = {n, matches2[y].m}
 
 		# clean up
 		free(chart1)
@@ -194,13 +194,13 @@ cdef void getsequencesfor(int n, int length,
 	cdef Sequence *seq2t
 	seq1s = &(text1seqs[n])
 	seq1t = &(text2seqs[n])
-	for m in range(n + 1, length):
+	for m in prange(n + 1, length):
 		seq2s = &(text1seqs[m])
 		longest_common_substrings(chart1, seq1s, seq2s)
-		for s in range(minmatchsize - 1, seq1s.length):
+		for s in range(seq1s.length):
 			matches1[m * seq1s.length + s].n = n
 			matches1[m * seq1s.length + s].m = m
-			if (minmatchsize <= chart1[s] <= s + 1
+			if (minmatchsize <= chart1[s] <= s
 					and (s + 1 == seq1s.length
 						or chart1[s + 1] != chart1[s] + 1)):
 				matches1[m * seq1s.length + s].start = s - chart1[s] + 1
@@ -211,10 +211,10 @@ cdef void getsequencesfor(int n, int length,
 
 		seq2t = &(text2seqs[m])
 		longest_common_substrings(chart2, seq1t, seq2t)
-		for t in range(minmatchsize - 1, seq1t.length):
+		for t in range(seq1t.length):
 			matches2[m * seq1t.length + t].n = n
 			matches2[m * seq1t.length + t].m = m
-			if (minmatchsize <= chart2[t] <= t + 1
+			if (minmatchsize <= chart2[t] <= t
 					and (t + 1 == seq1t.length
 						or chart2[t + 1] != chart2[t] + 1)):
 				matches2[m * seq1t.length + t].start = t - chart2[t] + 1

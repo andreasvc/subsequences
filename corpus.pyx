@@ -34,22 +34,23 @@ cdef class Text(object):
 			size_t n, m, idx = 0
 			list text
 
-		lines = itertools.islice(
+		data = itertools.islice(
 				io.open(filename, encoding=encoding),
 				None, limit)
+		if lower:
+			lines = (line.lower() for line in data)
+		else:
+			lines = data
 
 		if bracket and pos:
 			text = [['/'.join(reversed(tagword))
-					for tagword in posterminalsre.findall(line.lower()
-						if lower else line)]
+					for tagword in posterminalsre.findall(line)]
 					for line in lines]
 		elif bracket:
-			text = [terminalsre.findall(line.lower() if lower else line)
+			text = [terminalsre.findall(line)
 					for line in lines]
 		else:
-			text = [line.strip().lower().split() if lower
-					else line.strip().split()
-					for line in lines]
+			text = [line.split() for line in lines]
 
 		if strfragment:
 			text = [['#START#'] + sent + ['#STOP#'] for sent in text]
@@ -94,7 +95,7 @@ cdef class Comparator(object):
 		self.lower = lower
 		self.filterre = None if filterre is None else re.compile(filterre)
 		self.mapping, self.revmapping = getmapping(filename, encoding,
-				bracket, pos, strfragment, lower, self.filterre)
+				bracket, pos, strfragment, limit, lower, self.filterre)
 		self.text1 = Text(filename, self.mapping, encoding, bracket, pos,
 				strfragment, limit, lower, filterre is not None)
 
@@ -110,7 +111,8 @@ cdef class Comparator(object):
 			if storetokens:
 				extendmapping(self.mapping, self.revmapping, filename,
 						self.encoding, self.bracket, self.pos,
-						self.strfragment, self.lower, self.filterre)
+						self.strfragment, self.limit, self.lower,
+						self.filterre)
 			text2 = Text(filename, self.mapping, self.encoding, self.bracket,
 					self.pos, self.strfragment, self.limit, self.lower,
 					self.filterre is not None)
@@ -124,19 +126,26 @@ cdef class Comparator(object):
 
 
 def getmapping(filename, encoding='utf8', bracket=False, pos=False,
-		strfragment=False, lower=False, filterre=None):
+		strfragment=False, limit=None, lower=False, filterre=None):
 	"""Create a mapping of tokens to integers and back from a given file."""
+	# NB: sentence limit is not used here.
 	# split file into tokens and turn into set
-	data = io.open(filename, encoding=encoding).read()
-	if lower:
-		data = data.lower()
+	lines = itertools.islice(
+			io.open(filename, encoding=encoding),
+			None, limit)
 	if bracket and pos:
-		tokens = set(['/'.join(reversed(tagword)) for tagword
-				in posterminalsre.findall(data)])
+		tokens = {'/'.join(reversed(tagword))
+				for line in lines
+					for tagword in posterminalsre.findall(line)}
 	elif bracket:
-		tokens = set(terminalsre.findall(data))
+		tokens = {token for line in lines
+				for token in terminalsre.findall(line)}
 	else:
-		tokens = set(data.split())
+		tokens = {token for line in lines
+				for token in line.split()}
+
+	if lower:
+		tokens = {token.lower() for token in tokens}
 	if filterre is not None:
 		tokens = {a for a in tokens if filterre.match(a) is not None}
 	# the empty string '' is used as sentinel token (indicates a gap)
@@ -149,21 +158,27 @@ def getmapping(filename, encoding='utf8', bracket=False, pos=False,
 
 
 def extendmapping(mapping, revmapping, filename, encoding='utf8',
-		bracket=False, pos=False, strfragment=False, lower=False,
-		filterre=None):
+		bracket=False, pos=False, strfragment=False, limit=None,
+		lower=False, filterre=None):
 	"""Extend an existing mapping of tokens to integers with tokens
 	from a given file."""
 	# split file into tokens and turn into set
-	data = io.open(filename, encoding=encoding).read()
-	if lower:
-		data = data.lower()
+	lines = itertools.islice(
+			io.open(filename, encoding=encoding),
+			None, limit)
 	if bracket and pos:
-		tokens = set(['/'.join(reversed(tagword)) for tagword
-				in posterminalsre.findall(data)])
+		tokens = {'/'.join(reversed(tagword))
+				for line in lines
+					for tagword in posterminalsre.findall(line)}
 	elif bracket:
-		tokens = set(terminalsre.findall(data))
+		tokens = {token for line in lines
+				for token in terminalsre.findall(line)}
 	else:
-		tokens = set(data.split())
+		tokens = {token for line in lines
+				for token in line.split()}
+
+	if lower:
+		tokens = {token.lower() for token in tokens}
 	if filterre is not None:
 		tokens = {a for a in tokens if filterre.match(a) is not None}
 	x = len(revmapping)
