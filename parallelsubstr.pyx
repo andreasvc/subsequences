@@ -131,7 +131,7 @@ cdef class ParallelComparator(Comparator):
 					minmatchsize, matches1, matches2)
 
 			with gil:
-				print('%d.' % n)
+				print('%d.' % n, file=sys.stderr)
 				if debug:
 					print(' '.join(['%d:%d:%s' % (s, seq1s.tokens[s], a)
 							for s, a in enumerate(self.seqtostr(seq1s))]),
