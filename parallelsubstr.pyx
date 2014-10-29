@@ -14,8 +14,7 @@ from corpus cimport Text, Token, Sequence, SeqIdx, Comparator
 include "constants.pxi"
 
 
-cdef struct Match:  # total 96 bytes
-	uint32_t n  # sentence number 1
+cdef struct Match:  # total 64 bytes
 	uint32_t m  # sentence number 2
 	SeqIdx start  # source match start idx
 	SeqIdx end  # source match end idx
@@ -218,7 +217,6 @@ cdef void getsequencesfor(int n, int length,
 		seq2s = &(text1seqs[m])
 		longest_common_substrings(chart1, seq1s, seq2s)
 		for s in range(seq1s.length):
-			matches1[m * seq1s.length + s].n = n
 			matches1[m * seq1s.length + s].m = m
 			if (minmatchsize <= chart1[s] <= s
 					and (s + 1 == seq1s.length
@@ -232,7 +230,6 @@ cdef void getsequencesfor(int n, int length,
 		seq2t = &(text2seqs[m])
 		longest_common_substrings(chart2, seq1t, seq2t)
 		for t in range(seq1t.length):
-			matches2[m * seq1t.length + t].n = n
 			matches2[m * seq1t.length + t].m = m
 			if (minmatchsize <= chart2[t] <= t
 					and (t + 1 == seq1t.length
