@@ -13,13 +13,11 @@ from corpus cimport Text, Token, Sequence, SeqIdx, Comparator
 include "constants.pxi"
 
 
-cdef struct Match:  # total 128 bytes
+cdef struct Match:  # total 96 bytes
 	uint32_t n  # sentence number 1
 	uint32_t m  # sentence number 2
-	SeqIdx s1  # source match start idx
-	SeqIdx s2  # source match end idx
-	SeqIdx t1  # target match start idx
-	SeqIdx t2  # target match end idx
+	SeqIdx start  # source match start idx
+	SeqIdx end  # source match end idx
 
 
 @cython.freelist(1000)
@@ -83,90 +81,85 @@ cdef class ParallelComparator(Comparator):
 			SeqIdx *chart1
 			SeqIdx *chart2
 			Sequence *seq1s  # source = text1
-			Match *result[1]
-			Match *matches
-			Match match
+			Sequence *seq1t  # target = text2
+			Match *matches1
+			Match *matches2
 			SubString sourcematch, targetmatch
-			size_t n, s, t, x
-			int nummatches, capacity = 1000
-			dict srcstrs = {}
-			dict targetstrs = {}
-			list revsrcstrs = []
-			list revtargetstrs = []
+			size_t n, m, s, x, y
 			set indexset
-			list table = []
+			dict table = {}  # dict of dict of sets
 		self.text2 = self.readother(filename, storetokens=True)
 		if self.text1.length != self.text2.length:
 			raise ValueError('Source and target files have different '
 					'number of lines: %d vs %d' % (
 					self.text1.length, self.text2.length))
 
+		# allocate temporary datastructures
+		chart1 = <SeqIdx *>malloc(self.text1.maxlen * 3 * sizeof(SeqIdx))
+		chart2 = <SeqIdx *>malloc(self.text2.maxlen * 3 * sizeof(SeqIdx))
+		if chart1 is NULL or chart2 is NULL:
+			raise MemoryError
+		matches1 = <Match *>malloc(self.text1.maxlen * self.text1.length
+				* sizeof(Match))
+		matches2 = <Match *>malloc(self.text2.maxlen * self.text2.length
+				* sizeof(Match))
+		if matches1 is NULL or matches2 is NULL:
+			raise MemoryError
+
 		for n in range(self.text1.length - 1):
 			seq1s = &(self.text1.seqs[n])
-
-			# allocate temporary datastructures
-			chart1 = <SeqIdx *>malloc(self.text1.maxlen * 3 * sizeof(SeqIdx))
-			chart2 = <SeqIdx *>malloc(self.text2.maxlen * 3 * sizeof(SeqIdx))
-			if chart1 is NULL or chart2 is NULL:
-				raise MemoryError
-			result[0] = matches = <Match *>malloc(capacity * sizeof(Match))
-			if matches is NULL:
-				raise MemoryError
+			seq1t = &(self.text2.seqs[n])
 
 			# the following could be done in a separate thread/process:
-			nummatches = getsequencesfor(n, self.text1.length,
+			getsequencesfor(n, self.text1.length,
 					chart1, chart2, self.text1.seqs, self.text2.seqs,
-					minmatchsize, result, &capacity)
+					minmatchsize, matches1, matches2)
+
+			print('%d. %s' % (n, ' '.join([
+					'%d:%d:%s' % (s, seq1s.tokens[s], a)
+					for s, a in enumerate(self.seqtostr(seq1s))])),
+					file=sys.stderr)
 			if debug:
-				print('%d. %s' % (n, ' '.join([
-						'%d:%d:%s' % (s, seq1s.tokens[s], a)
-						for s, a in enumerate(self.seqtostr(seq1s))])),
-						file=sys.stderr)
 				for s in range(seq1s.length):
 					print('%d:%d' % (s, chart1[s]), end=' ', file=sys.stderr)
 				print()
-			if nummatches == -1:
-				raise ValueError
-			matches = result[0]
 
-			for x in range(nummatches):
-				match = matches[x]
-				sourcematch = new_SubString(
-						&(self.text1.seqs[match.n]), match.s1, match.s2)
-				targetmatch = new_SubString(
-						&(self.text2.seqs[match.n]), match.t1, match.t2)
-				if debug:
-					print('n=%d, m=%d, s[%d:%d], t[%d:%d]' % (
-							match.n, match.m, match.s1, match.s2,
-							match.t1, match.t2))
-				if sourcematch == targetmatch:
-					continue  # FIXME: might want to prune this string globally
-				if sourcematch in srcstrs:
-					s = srcstrs[sourcematch]
-				else:
-					s = len(srcstrs)
-					srcstrs[sourcematch] = len(srcstrs)
-					revsrcstrs.append(sourcematch)
-					table.append({})
-				if targetmatch in targetstrs:
-					t = targetstrs[targetmatch]
-					if t in table[s]:
-						indexset = table[s][t]
-						indexset.add(match.n)
-						indexset.add(match.m)
-					else:
-						table[s][t] = {match.n, match.m}
-				else:
-					t = len(targetstrs)
-					targetstrs[targetmatch] = len(targetstrs)
-					revtargetstrs.append(targetmatch)
-					table[s][t] = {match.n, match.m}
-			free(chart1)
-			free(chart2)
-			free(matches)
+			# For each sentence m,
+			for m in range(n + 1, self.text1.length):
+				# and each longest substring in source text sentence m,
+				for x in range(m * seq1s.length, (m + 1) * seq1s.length):
+					if matches1[x].start == matches1[x].end:
+						continue
+					sourcematch = new_SubString(
+							&(self.text1.seqs[matches1[x].n]),
+							matches1[x].start, matches1[x].end)
+					# Add the longest parallel substrings in same target sent.
+					for y in range(m * seq1t.length, (m + 1) * seq1t.length):
+						if matches2[y].start == matches2[y].end:
+							continue
+						targetmatch = new_SubString(
+								&(self.text2.seqs[matches2[y].n]),
+								matches2[y].start, matches2[y].end)
+						if sourcematch == targetmatch:
+							break  # FIXME: prune this string globally?
+						if debug:
+							print(sourcematch, targetmatch, file=sys.stderr)
+						if sourcematch not in table:
+							table[sourcematch] = {}
+						if targetmatch in table[sourcematch]:
+							indexset = table[sourcematch][targetmatch]
+							indexset.add(matches1[x].n)
+							indexset.add(matches2[y].m)
+						else:
+							table[sourcematch][targetmatch] = {
+									matches1[x].n, matches2[y].m}
 
 		# clean up
-		return table, revsrcstrs, revtargetstrs
+		free(chart1)
+		free(chart2)
+		free(matches1)
+		free(matches2)
+		return table
 
 	cdef subtostr(self, SubString substring):
 		"""Turn the array representation of a substring into a space separated
@@ -176,65 +169,59 @@ cdef class ParallelComparator(Comparator):
 				self.revmapping[substring.seq.tokens[n]]
 				for n in range(substring.start, substring.end)])
 
-	def dumptable(self, table, srcstrs, targetstrs, out):
+	def dumptable(self, table, out):
 		for length, srcmatches in itertools.groupby(
-				sorted(zip(srcstrs, table), key=lambda x: len(x[0])),
-				key=lambda x: len(x[0])):
+				sorted(table, key=lambda x: len(x)),
+				key=lambda x: len(x)):
 			out.write('%d:\n' % length)
-			for srcmatch, target in srcmatches:
+			for srcmatch in srcmatches:
 				out.write('\t%s\n' % self.subtostr(srcmatch))
-				for targetmatch, idx in target.iteritems():
+				for targetmatch, idx in table[srcmatch].iteritems():
 					out.write('\t\t%s\t{%s}\n' % (
-							self.subtostr(targetstrs[targetmatch]),
+							self.subtostr(targetmatch),
 							','.join([str(a) for a in idx])))
 
 
-cdef int getsequencesfor(int n, int length,
+cdef void getsequencesfor(int n, int length,
 			SeqIdx *chart1, SeqIdx *chart2,
 			Sequence *text1seqs, Sequence *text2seqs,
-			int minmatchsize, Match **result, int *capacity) nogil:
+			int minmatchsize, Match *matches1, Match *matches2) nogil:
 	"""Compare sentence n against all sentences starting with n + 1."""
-	cdef int nummatches = 0
 	cdef int m, s, t
 	cdef Sequence *seq1s
 	cdef Sequence *seq2s
 	cdef Sequence *seq1t
 	cdef Sequence *seq2t
-	cdef Match *matches = result[0]
 	seq1s = &(text1seqs[n])
 	seq1t = &(text2seqs[n])
 	for m in range(n + 1, length):
 		seq2s = &(text1seqs[m])
-		seq2t = &(text2seqs[m])
-
 		longest_common_substrings(chart1, seq1s, seq2s)
-		longest_common_substrings(chart2, seq1t, seq2t)
-
 		for s in range(minmatchsize - 1, seq1s.length):
+			matches1[m * seq1s.length + s].n = n
+			matches1[m * seq1s.length + s].m = m
 			if (minmatchsize <= chart1[s] <= s + 1
 					and (s + 1 == seq1s.length
 						or chart1[s + 1] != chart1[s] + 1)):
+				matches1[m * seq1s.length + s].start = s - chart1[s] + 1
+				matches1[m * seq1s.length + s].end = s + 1
+			else:
+				matches1[m * seq1s.length + s].start = 0
+				matches1[m * seq1s.length + s].end = 0
 
-				for t in range(minmatchsize - 1, seq1t.length):
-					if (minmatchsize <= chart2[t] <= t + 1
-							and (t + 1 == seq1t.length
-								or chart2[t + 1] != chart2[t] + 1)):
-
-						matches[nummatches].n = n
-						matches[nummatches].m = m
-						matches[nummatches].s1 = s - chart1[s] + 1
-						matches[nummatches].s2 = s + 1
-						matches[nummatches].t1 = t - chart2[t] + 1
-						matches[nummatches].t2 = t + 1
-						nummatches += 1
-
-						if nummatches > capacity[0]:
-							capacity[0] += capacity[0] // 2
-							matches = result[0] = <Match *>realloc(
-									matches, capacity[0] * sizeof(Match))
-							if matches is NULL:
-								return -1
-	return nummatches
+		seq2t = &(text2seqs[m])
+		longest_common_substrings(chart2, seq1t, seq2t)
+		for t in range(minmatchsize - 1, seq1t.length):
+			matches2[m * seq1t.length + t].n = n
+			matches2[m * seq1t.length + t].m = m
+			if (minmatchsize <= chart2[t] <= t + 1
+					and (t + 1 == seq1t.length
+						or chart2[t + 1] != chart2[t] + 1)):
+				matches2[m * seq1t.length + t].start = t - chart2[t] + 1
+				matches2[m * seq1t.length + t].end = t + 1
+			else:
+				matches2[m * seq1t.length + t].start = 0
+				matches2[m * seq1t.length + t].end = 0
 
 
 cdef void longest_common_substrings(SeqIdx *chart,

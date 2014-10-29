@@ -60,8 +60,7 @@ cdef class Text(object):
 		self.maxlen = max(map(len, text))
 		self.seqs = <Sequence *>malloc(len(text) * sizeof(Sequence))
 		assert self.seqs is not NULL
-		self.tokens = <Token *>malloc(sum(map(len, text))
-				* sizeof(self.seqs.tokens[0]))
+		self.tokens = <Token *>malloc(sum(map(len, text)) * sizeof(Token))
 		assert self.tokens is not NULL
 
 		for n, sent in enumerate(text):

@@ -74,10 +74,10 @@ def main():
 				strfragment='--strfragment' in opts,
 				lower='--lower' in opts,
 				limit=limit, filterre=filterre)
-		table, srcstrs, targetstrs = comparator.getsequences(args[1],
+		table = comparator.getsequences(args[1],
 				minmatchsize=int(opts.get('--minmatches', 1)),
 				debug='--debug' in opts)
-		comparator.dumptable(table, srcstrs, targetstrs, outfile)
+		comparator.dumptable(table, outfile)
 		return
 
 	comparator = LCSComparator(filename1,

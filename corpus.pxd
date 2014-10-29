@@ -17,7 +17,8 @@ cdef struct Sequence:
 cdef class Text(object):
 	cdef Sequence *seqs
 	cdef Token *tokens # this contiguous array will contain all tokens
-	cdef public int length, maxlen
+	cdef public int length  # number of sequences
+	cdef public int maxlen  # number of tokens in longest sequence
 
 
 cdef class Comparator(object):
