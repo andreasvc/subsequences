@@ -6,7 +6,7 @@ import itertools
 
 # Cython imports
 cimport cython
-from libc.stdlib cimport malloc, realloc, free
+from libc.stdlib cimport abort, malloc, free
 from libc.stdint cimport uint8_t, uint32_t
 from libc.string cimport memcmp
 from cython.parallel cimport parallel, prange
@@ -88,7 +88,9 @@ cdef class ParallelComparator(Comparator):
 			Match *matches1
 			Match *matches2
 			SubString sourcematch, targetmatch
-			size_t n, m, s, x, y, text1length = self.text1.length
+			long n, m, s, x, y
+			long text1length, text2length
+			int text1maxlen, text2maxlen
 			set indexset
 			dict table = {}  # dict of dict of sets
 		self.text2 = self.readother(filename, storetokens=True)
@@ -101,54 +103,59 @@ cdef class ParallelComparator(Comparator):
 				'text2 max sent length: %d.' % (
 				self.text1.length, len(self.mapping),
 				self.text1.maxlen, self.text2.maxlen), file=sys.stderr)
+		text1length = self.text1.length
+		text2length = self.text2.length
+		text1maxlen = self.text1.maxlen
+		text2maxlen = self.text2.maxlen
 		text1seqs = self.text1.seqs
 		text2seqs = self.text2.seqs
 
-		# allocate temporary datastructures
-		chart1 = <SeqIdx *>malloc(self.text1.maxlen * 3 * sizeof(SeqIdx))
-		chart2 = <SeqIdx *>malloc(self.text2.maxlen * 3 * sizeof(SeqIdx))
-		if chart1 is NULL or chart2 is NULL:
-			raise MemoryError
-		matches1 = <Match *>malloc(self.text1.maxlen * self.text1.length
-				* sizeof(Match))
-		matches2 = <Match *>malloc(self.text2.maxlen * self.text2.length
-				* sizeof(Match))
-		if matches1 is NULL or matches2 is NULL:
-			raise MemoryError
 
-		for n in prange(text1length - 1, nogil=True):
-			# with nogil:
+		for n in prange(text1length - 1, nogil=True, schedule='dynamic'):
+			# allocate temporary datastructures
+			chart1 = <SeqIdx *>malloc(text1maxlen * 3 * sizeof(SeqIdx))
+			chart2 = <SeqIdx *>malloc(text2maxlen * 3 * sizeof(SeqIdx))
+			if chart1 is NULL or chart2 is NULL:
+				abort()
+			matches1 = <Match *>malloc(text1maxlen * text1length
+					* sizeof(Match))
+			matches2 = <Match *>malloc(text2maxlen * text2length
+					* sizeof(Match))
+			if matches1 is NULL or matches2 is NULL:
+				abort()
 			seq1s = &(text1seqs[n])
 			seq1t = &(text2seqs[n])
-			getsequencesfor(n, self.text1.length,
-					chart1, chart2, self.text1.seqs, self.text2.seqs,
+
+			getsequencesfor(n, text1length,
+					chart1, chart2, text1seqs, text2seqs,
 					minmatchsize, matches1, matches2)
 
 			with gil:
-				print('%d. %s' % (n, ' '.join([
-						'%d:%d:%s' % (s, seq1s.tokens[s], a)
-						for s, a in enumerate(self.seqtostr(seq1s))])),
-						file=sys.stderr)
+				print('%d.' % n)
 				if debug:
-					for s in range(seq1s.length):
-						print('%d:%d' % (s, chart1[s]), end=' ',
+					print(' '.join(['%d:%d:%s' % (s, seq1s.tokens[s], a)
+							for s, a in enumerate(self.seqtostr(seq1s))]),
+							file=sys.stderr)
+					print(' '.join(['%d:%d' % (s, chart1[s])
+								for s in range(seq1s.length)]),
 								file=sys.stderr)
-					print()
 
-				# For each sentence m,
-				for m in range(n + 1, self.text1.length):
-					# and each longest substring in source text sentence m,
-					for x in range(m * seq1s.length, (m + 1) * seq1s.length):
-						if matches1[x].start == matches1[x].end:
-							continue
+			# For each sentence m,
+			for m in range(n + 1, self.text1.length):
+				# and each longest substring in source text sentence m,
+				for x in range(m * seq1s.length, (m + 1) * seq1s.length):
+					if matches1[x].start == matches1[x].end:
+						continue
+					with gil:
 						sourcematch = new_SubString(
 								&(self.text1.seqs[n]),
 								matches1[x].start, matches1[x].end)
-						# Add the longest parallel substrs in same target sent.
-						for y in range(m * seq1t.length,
-								(m + 1) * seq1t.length):
-							if matches2[y].start == matches2[y].end:
-								continue
+					# Add the longest parallel substrs in same target sent.
+					for y in range(m * seq1t.length,
+							(m + 1) * seq1t.length):
+						if matches2[y].start == matches2[y].end:
+							continue
+						with gil:
 							targetmatch = new_SubString(
 									&(self.text2.seqs[n]),
 									matches2[y].start, matches2[y].end)
@@ -166,12 +173,12 @@ cdef class ParallelComparator(Comparator):
 							else:
 								table[sourcematch][targetmatch] = {
 										n, matches2[y].m}
+			# clean up
+			free(chart1)
+			free(chart2)
+			free(matches1)
+			free(matches2)
 
-		# clean up
-		free(chart1)
-		free(chart2)
-		free(matches1)
-		free(matches2)
 		return table
 
 	cdef subtostr(self, SubString substring):
