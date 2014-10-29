@@ -195,7 +195,7 @@ cdef int getsequencesfor(int n, int length,
 			int minmatchsize, Match **result, int *capacity) nogil:
 	"""Compare sentence n against all sentences starting with n + 1."""
 	cdef int nummatches = 0
-	cdef int s, t
+	cdef int m, s, t
 	cdef Sequence *seq1s
 	cdef Sequence *seq2s
 	cdef Sequence *seq1t
@@ -234,7 +234,7 @@ cdef int getsequencesfor(int n, int length,
 									matches, capacity[0] * sizeof(Match))
 							if matches is NULL:
 								return -1
-		return nummatches
+	return nummatches
 
 
 cdef void longest_common_substrings(SeqIdx *chart,
