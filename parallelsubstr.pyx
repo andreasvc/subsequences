@@ -81,12 +81,14 @@ cdef class ParallelComparator(Comparator):
 		cdef:
 			SeqIdx *chart1
 			SeqIdx *chart2
-			Sequence *seq1s  # source = text1
-			Sequence *seq1t  # target = text2
+			Sequence *text1seqs  # source = text1
+			Sequence *text2seqs  # target = text2
+			Sequence *seq1s
+			Sequence *seq1t
 			Match *matches1
 			Match *matches2
 			SubString sourcematch, targetmatch
-			size_t n, m, s, x, y
+			size_t n, m, s, x, y, text1length = self.text1.length
 			set indexset
 			dict table = {}  # dict of dict of sets
 		self.text2 = self.readother(filename, storetokens=True)
@@ -94,6 +96,13 @@ cdef class ParallelComparator(Comparator):
 			raise ValueError('Source and target files have different '
 					'number of lines: %d vs %d' % (
 					self.text1.length, self.text2.length))
+		print('%d sentences; %d token types.\n'
+				'text1 max sent length: %d;\n'
+				'text2 max sent length: %d.' % (
+				self.text1.length, len(self.mapping),
+				self.text1.maxlen, self.text2.maxlen), file=sys.stderr)
+		text1seqs = self.text1.seqs
+		text2seqs = self.text2.seqs
 
 		# allocate temporary datastructures
 		chart1 = <SeqIdx *>malloc(self.text1.maxlen * 3 * sizeof(SeqIdx))
@@ -107,52 +116,56 @@ cdef class ParallelComparator(Comparator):
 		if matches1 is NULL or matches2 is NULL:
 			raise MemoryError
 
-		for n in range(self.text1.length - 1):
-			seq1s = &(self.text1.seqs[n])
-			seq1t = &(self.text2.seqs[n])
-
-			# the following could be done in a separate thread/process:
+		for n in prange(text1length - 1, nogil=True):
+			# with nogil:
+			seq1s = &(text1seqs[n])
+			seq1t = &(text2seqs[n])
 			getsequencesfor(n, self.text1.length,
 					chart1, chart2, self.text1.seqs, self.text2.seqs,
 					minmatchsize, matches1, matches2)
 
-			print('%d. %s' % (n, ' '.join([
-					'%d:%d:%s' % (s, seq1s.tokens[s], a)
-					for s, a in enumerate(self.seqtostr(seq1s))])),
-					file=sys.stderr)
-			if debug:
-				for s in range(seq1s.length):
-					print('%d:%d' % (s, chart1[s]), end=' ', file=sys.stderr)
-				print()
+			with gil:
+				print('%d. %s' % (n, ' '.join([
+						'%d:%d:%s' % (s, seq1s.tokens[s], a)
+						for s, a in enumerate(self.seqtostr(seq1s))])),
+						file=sys.stderr)
+				if debug:
+					for s in range(seq1s.length):
+						print('%d:%d' % (s, chart1[s]), end=' ',
+								file=sys.stderr)
+					print()
 
-			# For each sentence m,
-			for m in range(n + 1, self.text1.length):
-				# and each longest substring in source text sentence m,
-				for x in range(m * seq1s.length, (m + 1) * seq1s.length):
-					if matches1[x].start == matches1[x].end:
-						continue
-					sourcematch = new_SubString(
-							&(self.text1.seqs[n]),
-							matches1[x].start, matches1[x].end)
-					# Add the longest parallel substrings in same target sent.
-					for y in range(m * seq1t.length, (m + 1) * seq1t.length):
-						if matches2[y].start == matches2[y].end:
+				# For each sentence m,
+				for m in range(n + 1, self.text1.length):
+					# and each longest substring in source text sentence m,
+					for x in range(m * seq1s.length, (m + 1) * seq1s.length):
+						if matches1[x].start == matches1[x].end:
 							continue
-						targetmatch = new_SubString(
-								&(self.text2.seqs[n]),
-								matches2[y].start, matches2[y].end)
-						if sourcematch == targetmatch:
-							break  # FIXME: prune this string globally?
-						if debug:
-							print(sourcematch, targetmatch, file=sys.stderr)
-						if sourcematch not in table:
-							table[sourcematch] = {}
-						if targetmatch in table[sourcematch]:
-							indexset = table[sourcematch][targetmatch]
-							indexset.add(n)
-							indexset.add(matches2[y].m)
-						else:
-							table[sourcematch][targetmatch] = {n, matches2[y].m}
+						sourcematch = new_SubString(
+								&(self.text1.seqs[n]),
+								matches1[x].start, matches1[x].end)
+						# Add the longest parallel substrs in same target sent.
+						for y in range(m * seq1t.length,
+								(m + 1) * seq1t.length):
+							if matches2[y].start == matches2[y].end:
+								continue
+							targetmatch = new_SubString(
+									&(self.text2.seqs[n]),
+									matches2[y].start, matches2[y].end)
+							if sourcematch == targetmatch:
+								break  # FIXME: prune this string globally?
+							if debug:
+								print(sourcematch, targetmatch,
+										file=sys.stderr)
+							if sourcematch not in table:
+								table[sourcematch] = {}
+							if targetmatch in table[sourcematch]:
+								indexset = table[sourcematch][targetmatch]
+								indexset.add(n)
+								indexset.add(matches2[y].m)
+							else:
+								table[sourcematch][targetmatch] = {
+										n, matches2[y].m}
 
 		# clean up
 		free(chart1)
@@ -194,7 +207,7 @@ cdef void getsequencesfor(int n, int length,
 	cdef Sequence *seq2t
 	seq1s = &(text1seqs[n])
 	seq1t = &(text2seqs[n])
-	for m in prange(n + 1, length):
+	for m in range(n + 1, length):
 		seq2s = &(text1seqs[m])
 		longest_common_substrings(chart1, seq1s, seq2s)
 		for s in range(seq1s.length):
