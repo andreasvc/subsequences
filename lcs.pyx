@@ -1,6 +1,7 @@
 """Extract Longest common subsequences from texts."""
 
 # Python imports
+from __future__ import print_function, division
 from collections import Counter
 
 # Cython imports
@@ -47,12 +48,21 @@ cdef class LCSComparator(Comparator):
 
 				buildchart(chart, seq1, seq2)
 				if debug:
+<<<<<<< HEAD
+					print("seq %d vs. seq %d" % (n, m))
+					for nn in range(seq1.length):
+						for mm in range(seq2.length):
+							print(chart[nn * seq2.length + mm], end=' ')
+						print()
+					print()
+=======
 					print "seq %d vs. seq %d" % (n, m)
 					for nn in range(seq1.length):
 						for mm in range(seq2.length):
 							print chart[nn * seq2.length + mm],
 						print
 					print
+>>>>>>> 18a7927f6931c3d6140274c9a8ab1354eb02a49e
 
 				if getall:
 					results.update(backtrackall(chart, seq1, seq2,
@@ -63,11 +73,11 @@ cdef class LCSComparator(Comparator):
 							seq2.length - 1, &result)
 					if debug:
 						for n in range(result.length - 1, -1, -1):
-							print "%d/%s" % (result.tokens[n],
+							print("%d/%s" % (result.tokens[n],
 									self.revmapping[result.tokens[n]]
 									if result.tokens[n] < len(self.revmapping)
-									else 'ERROR'),
-						print
+									else 'ERROR'), end=' ')
+						print()
 					# increase count for the subsequence that was found
 					if (result.length and (not self.strfragment
 							or self.makestrfragment(&result))):
@@ -124,23 +134,40 @@ cdef class LCSComparator(Comparator):
 
 				buildchart(chart, seq1, seq2)
 				if debug:
+<<<<<<< HEAD
+					print("seq %d vs. seq %d" % (n, m))
+					for nn in range(seq1.length):
+						for mm in range(seq2.length):
+							print(chart[nn * seq2.length + mm], end=' ')
+						print()
+					print()
+=======
 					print "seq %d vs. seq %d" % (n, m)
 					for nn in range(seq1.length):
 						for mm in range(seq2.length):
 							print chart[nn * seq2.length + mm],
 						print
 					print
+>>>>>>> 18a7927f6931c3d6140274c9a8ab1354eb02a49e
 
 				result.length = 0
 				backtrack(chart, seq1, seq2, seq1.length - 1,
 						seq2.length - 1, &result)
 				if debug:
 					for n in range(result.length - 1, -1, -1):
+<<<<<<< HEAD
+						print("%d/%s" % (result.tokens[n],
+								self.revmapping[result.tokens[n]]
+								if result.tokens[n] < len(self.revmapping)
+								else 'ERROR'), end=' ')
+					print()
+=======
 						print "%d/%s" % (result.tokens[n],
 								self.revmapping[result.tokens[n]]
 								if result.tokens[n] < len(self.revmapping)
 								else 'ERROR'),
 					print
+>>>>>>> 18a7927f6931c3d6140274c9a8ab1354eb02a49e
 				dist[n, m] = 1 - (<double>result.length /
 						(seq2.length if seq2.length > seq1.length
 						else seq1.length))

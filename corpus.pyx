@@ -27,8 +27,8 @@ cdef class Text(object):
 	space-delimeted tokens (e.g., words), and compiles it into an array with
 	tokens mapped to integers, according to the given mapping."""
 	def __init__(self, filename, mapping, encoding='utf8',
-			bracket=False, pos=False, strfragment=False, limit=None,
-			bint lower=False, bint filtered=False):
+			bracket=False, pos=False, chars=False, strfragment=False,
+			limit=None, bint lower=False, bint filtered=False):
 		cdef:
 			Token maxidx = max(mapping.values()) + 1
 			size_t n, m, idx = 0
@@ -42,7 +42,11 @@ cdef class Text(object):
 		else:
 			lines = data
 
-		if bracket and pos:
+		if chars:
+			if bracket or pos:
+				raise NotImplementedError
+			text = [list(line.rstrip('\n\r')) for line in lines]
+		elif bracket and pos:
 			text = [['/'.join(reversed(tagword))
 					for tagword in posterminalsre.findall(line)]
 					for line in lines]
@@ -86,18 +90,20 @@ cdef class Text(object):
 cdef class Comparator(object):
 	"""A base class for comparing two Texts to each other."""
 	def __init__(self, filename, encoding='utf8', bracket=False, pos=False,
-			strfragment=False, limit=None, lower=False, filterre=None):
+			chars=False, strfragment=False, limit=None, lower=False,
+			filterre=None):
 		self.encoding = encoding
 		self.bracket = bracket
 		self.pos = pos
+		self.chars = chars
 		self.strfragment = strfragment
 		self.limit = limit
 		self.lower = lower
 		self.filterre = None if filterre is None else re.compile(filterre)
 		self.mapping, self.revmapping = getmapping(filename, encoding,
-				bracket, pos, strfragment, limit, lower, self.filterre)
+				bracket, pos, chars, strfragment, limit, lower, self.filterre)
 		self.text1 = Text(filename, self.mapping, encoding, bracket, pos,
-				strfragment, limit, lower, filterre is not None)
+				chars, strfragment, limit, lower, filterre is not None)
 
 	cdef Text readother(self, filename, bint storetokens=False):
 		"""Load the second Text; if filename is None, compare to first text.
@@ -114,8 +120,8 @@ cdef class Comparator(object):
 						self.strfragment, self.limit, self.lower,
 						self.filterre)
 			text2 = Text(filename, self.mapping, self.encoding, self.bracket,
-					self.pos, self.strfragment, self.limit, self.lower,
-					self.filterre is not None)
+					self.pos, self.chars, self.strfragment, self.limit,
+					self.lower, self.filterre is not None)
 		return text2
 
 	cdef seqtostr(self, Sequence *seq):
@@ -126,14 +132,20 @@ cdef class Comparator(object):
 
 
 def getmapping(filename, encoding='utf8', bracket=False, pos=False,
-		strfragment=False, limit=None, lower=False, filterre=None):
+		chars=False, strfragment=False, limit=None, lower=False,
+		filterre=None):
 	"""Create a mapping of tokens to integers and back from a given file."""
 	# NB: sentence limit is not used here.
 	# split file into tokens and turn into set
 	lines = itertools.islice(
 			io.open(filename, encoding=encoding),
 			None, limit)
-	if bracket and pos:
+	if chars:
+		if bracket or pos:
+			raise NotImplementedError
+		tokens = {character for line in lines
+				for character in line.rstrip('\n\r')}
+	elif bracket and pos:
 		tokens = {'/'.join(reversed(tagword))
 				for line in lines
 					for tagword in posterminalsre.findall(line)}
@@ -158,7 +170,7 @@ def getmapping(filename, encoding='utf8', bracket=False, pos=False,
 
 
 def extendmapping(mapping, revmapping, filename, encoding='utf8',
-		bracket=False, pos=False, strfragment=False, limit=None,
+		bracket=False, pos=False, chars=False, strfragment=False, limit=None,
 		lower=False, filterre=None):
 	"""Extend an existing mapping of tokens to integers with tokens
 	from a given file."""
@@ -166,7 +178,12 @@ def extendmapping(mapping, revmapping, filename, encoding='utf8',
 	lines = itertools.islice(
 			io.open(filename, encoding=encoding),
 			None, limit)
-	if bracket and pos:
+	if chars:
+		if bracket or pos:
+			raise NotImplementedError
+		tokens = {character for line in lines
+				for character in line.rstrip('\n\r')}
+	elif bracket and pos:
 		tokens = {'/'.join(reversed(tagword))
 				for line in lines
 					for tagword in posterminalsre.findall(line)}

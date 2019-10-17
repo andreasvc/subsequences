@@ -191,7 +191,7 @@ cdef class ParallelComparator(Comparator):
 			out.write('%d:\n' % length)
 			for srcmatch in srcmatches:
 				out.write('\t%s\n' % self.subtostr(srcmatch))
-				for targetmatch, idx in table[srcmatch].iteritems():
+				for targetmatch, idx in table[srcmatch].items():
 					out.write('\t\t%s\t{%s}\n' % (
 							self.subtostr(targetmatch),
 							','.join([str(a) for a in idx])))

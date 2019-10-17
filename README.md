@@ -8,14 +8,14 @@
 
 ## Requirements:
 
-- Python 2.7+  http://www.python.org (need headers, e.g. python-dev package)
+- Python 3.3+  http://www.python.org (need headers, e.g. python-dev package)
 - Cython       http://www.cython.org
 
 For example, to install these dependencies and compile the code on Ubuntu,
 issue the following commands:
 
-    sudo apt-get install python-dev build-essential
-    sudo pip install cython
+    sudo apt-get install python3-dev build-essential
+    sudo pip3 install cython
     git clone git://github.com/andreasvc/subsequences.git
     cd subsequences
     make
@@ -66,12 +66,20 @@ issue the following commands:
     ==> text2 <==
     Through winter, rides between Oslo and Hammerfest use thirty hours up in a bus, though why travellers would select to ride there then might be pondered.
 
+<<<<<<< HEAD
+    $ python3 subseq.py text1 text2
+=======
     $ python subseq.py text1 text2
+>>>>>>> 18a7927f6931c3d6140274c9a8ab1354eb02a49e
     Hammerfest  a  though why  would  to  there     1
 
 ### LCS distance metric
 
+<<<<<<< HEAD
+    $ python3 subseq.py --dist text1 text2
+=======
     $ python subseq.py --dist text1 text2
+>>>>>>> 18a7927f6931c3d6140274c9a8ab1354eb02a49e
     0       0       0.538462
 
 ### Parallel substrings:
@@ -85,7 +93,11 @@ issue the following commands:
     Credo che a questo punto dobbiamo passare oltre .
     Il relatore chiede di rinviare la votazione alla prossima seduta e , per ora , di passare oltre .
 
+<<<<<<< HEAD
+    $ python3 subseq.py --parallel --filter='(?u)[-\w]+$' s t
+=======
     $ python subseq.py --parallel --filter='(?u)[-\w]+$' s t
+>>>>>>> 18a7927f6931c3d6140274c9a8ab1354eb02a49e
     0. I feel we will have to call it a day at this point
     1. He would like us to adjourn the vote to the next part-session and call it a day for now
     1:

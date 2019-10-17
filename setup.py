@@ -30,7 +30,7 @@ METADATA = dict(
 		description='Extract Subsequences from Text Corpora',
 		long_description=open('README.md').read(),
 		author='Andreas van Cranenburgh',
-		author_email='A.W.vanCranenburgh@uva.nl',
+		author_email='A.W.van.Cranenburgh@rug.nl',
 		url='https://github.com/andreasvc/subsequences/',
 		classifiers=[
 				'Development Status :: 4 - Beta',

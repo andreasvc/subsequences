@@ -1,4 +1,5 @@
 """ Longest common subsequence for two texts. """
+from __future__ import print_function, division
 import os
 import sys
 import itertools
@@ -28,6 +29,7 @@ compared, except for pairs <n, n>.
     --bracket      input is in the form of bracketed trees:
                    (S (DT one) (RB per) (NN line))
     --pos          when --bracket is enabled, include POS tags with tokens.
+	--chars        character-based instead of token-based comparison.
     --strfragment  sentences include START & STOP symbols, subsequences must
                    consist of 3 or more tokens, begin with at least 2 tokens.
     --parallel     read sentence aligned corpus and produce table of parallel
@@ -44,8 +46,13 @@ compared, except for pairs <n, n>.
 def main():
 	"""Parse command line arguments, get subsequences, dump to stdout/file."""
 	# command line arguments
+<<<<<<< HEAD
+	flags = ('debug', 'all', 'dist', 'bracket', 'pos', 'chars',
+			'strfragment', 'parallel', 'lower')
+=======
 	flags = ('debug', 'all', 'dist', 'bracket', 'pos', 'strfragment',
 			'parallel', 'lower')
+>>>>>>> 18a7927f6931c3d6140274c9a8ab1354eb02a49e
 	options = ('batch=', 'limit=', 'minmatches=', 'filter=', 'enc=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
@@ -60,34 +67,42 @@ def main():
 			assert os.path.exists(filename), (
 					"file %d not found: %r" % (n + 1, filename))
 	except (GetoptError, AssertionError) as err:
-		print err, USAGE
+		print(err, USAGE)
 		return
 
 	# read first text
 	filename1 = args[0]
 	limit = int(opts['--limit']) if '--limit' in opts else None
-	filterre = unicode(opts['--filter']) if '--filter' in opts else None
+	filterre = opts['--filter'] if '--filter' in opts else None
+	sep = '' if '--chars' in opts else ' '
 	if '--parallel' in opts:
-		comparator = ParallelComparator(filename1,
+		comparator = ParallelComparator(
+				filename1,
 				encoding=opts.get('--enc', 'utf8'),
 				bracket='--bracket' in opts,
 				pos='--pos' in opts,
+				chars='--chars' in opts,
 				strfragment='--strfragment' in opts,
 				lower='--lower' in opts,
-				limit=limit, filterre=filterre)
-		table = comparator.getsequences(args[1],
+				limit=limit,
+				filterre=filterre)
+		table = comparator.getsequences(
+				args[1],
 				minmatchsize=int(opts.get('--minmatches', 1)),
 				debug='--debug' in opts)
 		comparator.dumptable(table, outfile)
 		return
 
-	comparator = LCSComparator(filename1,
+	comparator = LCSComparator(
+			filename1,
 			encoding=opts.get('--enc', 'utf8'),
 			bracket='--bracket' in opts,
 			pos='--pos' in opts,
+			chars='--chars' in opts,
 			strfragment='--strfragment' in opts,
 			lower='--lower' in opts,
-			limit=limit, filterre=filterre)
+			limit=limit,
+			filterre=filterre)
 
 	# find subsequences
 	if '--dist' in opts:
@@ -103,7 +118,7 @@ def main():
 	if len(args) == 1:
 		results = comparator.getsequences(None,
 				getall='--all' in opts, debug='--debug' in opts)
-		outfile.writelines("%s\t%d\n" % (' '.join(subseq), count)
+		outfile.writelines("%s\t%d\n" % (sep.join(subseq), count)
 				for subseq, count in results.iteritems())
 	else:
 		for filename2 in args[1:]:
@@ -115,8 +130,8 @@ def main():
 				outfile = open("%s/%s_%s" % (opts['--batch'],
 					os.path.basename(filename1),
 					os.path.basename(filename2)), 'w')
-			outfile.writelines("%s\t%d\n" % (' '.join(subseq), count)
-					for subseq, count in results.iteritems())
+			outfile.writelines("%s\t%d\n" % (sep.join(subseq), count)
+					for subseq, count in results.items())
 			if '--batch' in opts:
 				outfile.close()
 
