@@ -21,7 +21,7 @@ cdef class LCSComparator(Comparator):
 			Sequence result
 			Sequence *seq1
 			Sequence *seq2
-			size_t n, m
+			size_t n, m, nn, mm
 
 		if getall and self.strfragment:
 			raise NotImplementedError
@@ -48,9 +48,9 @@ cdef class LCSComparator(Comparator):
 				buildchart(chart, seq1, seq2)
 				if debug:
 					print "seq %d vs. seq %d" % (n, m)
-					for n in range(seq1.length):
-						for m in range(seq2.length):
-							print chart[n * seq2.length + m],
+					for nn in range(seq1.length):
+						for mm in range(seq2.length):
+							print chart[nn * seq2.length + mm],
 						print
 					print
 
@@ -79,6 +79,77 @@ cdef class LCSComparator(Comparator):
 		if () in results:
 			del results[()]
 		return results
+
+	def getdistances(self, filename, debug=False):
+		"""Compute a distance matrix between the current file and another.
+		If filename is None, compare file against itself.
+
+		The returned numpy matrix dist[n, m] has the distance between sentence
+		n and m of text1 and text2, respectively.
+		
+		Distance is computed using the formula:
+		
+		dist(a, b) = len(LCS(a, b)) / max(len(a), len(b))
+
+		http://hjem.ifi.uio.no/danielry/StringMetric.pdf
+		"""
+		cdef:
+			Text text2
+			SeqIdx *chart
+			Sequence result
+			Sequence *seq1
+			Sequence *seq2
+			size_t n, m, nn, mm
+
+		text2 = self.readother(filename)
+		chart = <SeqIdx *>malloc(self.text1.maxlen * text2.maxlen
+				* sizeof(SeqIdx))
+		if chart is NULL:
+			raise MemoryError
+		result.tokens = <Token *>malloc(min(self.text1.maxlen, text2.maxlen)
+				* sizeof(result.tokens[0]))
+		if result.tokens is NULL:
+			raise MemoryError
+
+		import numpy as np
+		# find subsequences
+		dist = np.zeros((self.text1.length, text2.length), dtype=float) - 1
+		for n in range(self.text1.length):
+			seq1 = &(self.text1.seqs[n])
+			for m in range(text2.length):
+				seq2 = &(text2.seqs[m])
+				if seq1 is seq2:
+					dist[n, m] = 0
+					continue
+
+				buildchart(chart, seq1, seq2)
+				if debug:
+					print "seq %d vs. seq %d" % (n, m)
+					for nn in range(seq1.length):
+						for mm in range(seq2.length):
+							print chart[nn * seq2.length + mm],
+						print
+					print
+
+				result.length = 0
+				backtrack(chart, seq1, seq2, seq1.length - 1,
+						seq2.length - 1, &result)
+				if debug:
+					for n in range(result.length - 1, -1, -1):
+						print "%d/%s" % (result.tokens[n],
+								self.revmapping[result.tokens[n]]
+								if result.tokens[n] < len(self.revmapping)
+								else 'ERROR'),
+					print
+				dist[n, m] = 1 - (<double>result.length /
+						(seq2.length if seq2.length > seq1.length
+						else seq1.length))
+		# clean up
+		free(result.tokens)
+		free(chart)
+		result.tokens = chart = NULL
+		return dist
+
 
 	cdef inline bint makestrfragment(self, Sequence *result):
 		"""Peel away tokens until sequence is a string fragment;

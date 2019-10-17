@@ -20,6 +20,7 @@ compared, except for pairs <n, n>.
 
     --all          enable collection of all subsequences of maximum length;
                    by default an arbitrary longest subsequence is returned.
+    --dist         compute LCS-distances for all pairs of sentences.
     --debug        dump charts with lengths of common subsequences.
     --batch dir    compare text1 to an arbitrary number of other given texts,
                    and write the results to dir/A_B for file A compared to B.
@@ -43,8 +44,8 @@ compared, except for pairs <n, n>.
 def main():
 	"""Parse command line arguments, get subsequences, dump to stdout/file."""
 	# command line arguments
-	flags = ('debug', 'all', 'bracket', 'pos', 'strfragment', 'parallel',
-			'lower')
+	flags = ('debug', 'all', 'dist', 'bracket', 'pos', 'strfragment',
+			'parallel', 'lower')
 	options = ('batch=', 'limit=', 'minmatches=', 'filter=', 'enc=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
@@ -89,6 +90,16 @@ def main():
 			limit=limit, filterre=filterre)
 
 	# find subsequences
+	if '--dist' in opts:
+		if len(args) > 2 or '--batch' in opts:
+			raise NotImplementedError
+		dists = comparator.getdistances(None if len(args) == 1 else args[1],
+				debug='--debug' in opts)
+		import numpy as np
+		outfile.writelines('%d\t%d\t%g\n' % (n, m, dist)
+				for (n, m), dist in np.ndenumerate(dists)
+				if dist != -1)
+		return
 	if len(args) == 1:
 		results = comparator.getsequences(None,
 				getall='--all' in opts, debug='--debug' in opts)
