@@ -44,6 +44,7 @@ issue the following commands:
         --bracket      input is in the form of bracketed trees:
                        (S (DT one) (RB per) (NN line))
         --pos          when --bracket is enabled, include POS tags with tokens.
+        --chars        character-based instead of token-based comparison.
         --strfragment  sentences include START & STOP symbols, subsequences must
                        consist of 3 or more tokens, begin with at least 2 tokens.
         --parallel     read sentence aligned corpus and produce table of parallel
@@ -66,20 +67,12 @@ issue the following commands:
     ==> text2 <==
     Through winter, rides between Oslo and Hammerfest use thirty hours up in a bus, though why travellers would select to ride there then might be pondered.
 
-<<<<<<< HEAD
     $ python3 subseq.py text1 text2
-=======
-    $ python subseq.py text1 text2
->>>>>>> 18a7927f6931c3d6140274c9a8ab1354eb02a49e
     Hammerfest  a  though why  would  to  there     1
 
 ### LCS distance metric
 
-<<<<<<< HEAD
     $ python3 subseq.py --dist text1 text2
-=======
-    $ python subseq.py --dist text1 text2
->>>>>>> 18a7927f6931c3d6140274c9a8ab1354eb02a49e
     0       0       0.538462
 
 ### Parallel substrings:
@@ -93,11 +86,7 @@ issue the following commands:
     Credo che a questo punto dobbiamo passare oltre .
     Il relatore chiede di rinviare la votazione alla prossima seduta e , per ora , di passare oltre .
 
-<<<<<<< HEAD
     $ python3 subseq.py --parallel --filter='(?u)[-\w]+$' s t
-=======
-    $ python subseq.py --parallel --filter='(?u)[-\w]+$' s t
->>>>>>> 18a7927f6931c3d6140274c9a8ab1354eb02a49e
     0. I feel we will have to call it a day at this point
     1. He would like us to adjourn the vote to the next part-session and call it a day for now
     1:

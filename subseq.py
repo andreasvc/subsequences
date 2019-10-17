@@ -46,13 +46,8 @@ compared, except for pairs <n, n>.
 def main():
 	"""Parse command line arguments, get subsequences, dump to stdout/file."""
 	# command line arguments
-<<<<<<< HEAD
 	flags = ('debug', 'all', 'dist', 'bracket', 'pos', 'chars',
 			'strfragment', 'parallel', 'lower')
-=======
-	flags = ('debug', 'all', 'dist', 'bracket', 'pos', 'strfragment',
-			'parallel', 'lower')
->>>>>>> 18a7927f6931c3d6140274c9a8ab1354eb02a49e
 	options = ('batch=', 'limit=', 'minmatches=', 'filter=', 'enc=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
